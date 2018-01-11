@@ -1,5 +1,5 @@
 `timescale 1ns/10ps
-`define multiple 2
+`define multiple 10
 
 module rw_nx_platform_sim(
 
@@ -14,31 +14,43 @@ wire AD9361_clk;
 reg clk_80m_in;
 reg rst_n;
 
-wire proc_hready;
-reg [31:0] proc_haddr;
-reg [1:0] proc_htrans;
-reg proc_hwrite;
-reg [1:0] proc_hsize;
+wire        proc_hready;
+reg [31:0]  proc_haddr;
+reg [1:0]   proc_htrans;
+reg         proc_hwrite;
+reg [1:0]   proc_hsize;
 wire [31:0] proc_hrdata;
-reg [31:0] proc_hwdata;
-wire [1:0] proc_hresp;
+reg [31:0]  proc_hwdata;
+wire [1:0]  proc_hresp;
 
-wire m0_axis_tohost_tvalid;
-wire m0_axis_tohost_tready;
+wire        m0_axis_tohost_tvalid;
+wire        m0_axis_tohost_tready;
 wire [63:0] m0_axis_tohost_tdata;
-wire [7:0] m0_axis_tohost_tkeep;
-wire m0_axis_tohost_tlast;
+wire [7:0]  m0_axis_tohost_tkeep;
+wire        m0_axis_tohost_tlast;
 
-reg s1_axis_fromhost_tvalid;
-wire s1_axis_fromhost_tready;
-reg [63:0] s1_axis_fromhost_tdata;
-reg [7:0] s1_axis_fromhost_tkeep;
-reg s1_axis_fromhost_tlast;
+wire         s1_axis_fromhost_tvalid;
+wire         s1_axis_fromhost_tready;
+wire [63:0]  s1_axis_fromhost_tdata;
+wire [7:0]   s1_axis_fromhost_tkeep;
+wire         s1_axis_fromhost_tlast;
+
+reg [31:0]  simu_axis_tdata;
+reg [3:0]   simu_axis_tkeep;
+reg         simu_axis_tlast;
+reg         simu_axis_tvalid;
+wire        simu_axis_tready;
 
 parameter PERIOD_15m = 66.66;
 parameter PERIOD_30m = 33.33;
 parameter PERIOD_80m = 12.5;
 parameter PERIOD_200m = 5;
+
+wire [63:0] axis_fifo_tdata;
+wire        axis_fifo_tvalid;
+wire [7:0]  axis_fifo_tkeep;
+wire        axis_fifo_tready;
+wire        axis_fifo_tlast;
 
 
 clk_wiz_0 u_clk_wiz_0(
@@ -48,6 +60,72 @@ clk_wiz_0 u_clk_wiz_0(
     .clk_out2         (clk_80m),        //set 80m       
     .clk_out3         (AD9361_clk),        //set 80m 
     .resetn           (rst_n)
+);
+
+
+
+dma_if_32to64_0 u_dma_if_32to64(
+
+
+    .clk                        (clk_80m)               ,
+    .rst_n                      (rst_n)                 ,
+    
+    .s1_axis_fromhost_tdata     (simu_axis_tdata)   ,
+    .s1_axis_fromhost_tkeep     (simu_axis_tkeep)   ,
+    .s1_axis_fromhost_tvalid    (simu_axis_tvalid)  ,
+    .s1_axis_fromhost_tready    (simu_axis_tready)  ,
+    .s1_axis_fromhost_tlast     (simu_axis_tlast)   ,
+    
+    .m1_axis_fromhost_tvalid      (axis_fifo_tvalid),
+    .m1_axis_fromhost_tready      (axis_fifo_tready),
+    .m1_axis_fromhost_tkeep       (axis_fifo_tkeep),
+    .m1_axis_fromhost_tdata       (axis_fifo_tdata),
+    .m1_axis_fromhost_tlast       (axis_fifo_tlast)
+
+
+);
+
+
+
+axis_data_fifo_0 u_axis_data_fifo_0(
+
+    .s_axis_aclk        (clk_80m)                   ,
+    .s_axis_aresetn     (rst_n)                     ,
+    
+    .s_axis_tdata       (axis_fifo_tdata),
+    .s_axis_tkeep       (axis_fifo_tkeep),
+    .s_axis_tlast       (axis_fifo_tlast),
+    .s_axis_tvalid      (axis_fifo_tvalid),
+    .s_axis_tready      (axis_fifo_tready),
+    
+    //      down stream fifo port to dinidma        // 
+    .m_axis_tdata       (s1_axis_fromhost_tdata)    ,
+    .m_axis_tkeep       (s1_axis_fromhost_tkeep)   ,
+    .m_axis_tlast       (s1_axis_fromhost_tlast)    ,
+    .m_axis_tvalid      (s1_axis_fromhost_tvalid)   ,
+    .m_axis_tready      (s1_axis_fromhost_tready)   
+    //      datain port to this fifo                //
+
+);
+
+
+axis_data_fifo_0 u_axis_data_fifo_up_0(
+
+    .s_axis_aclk        (clk_80m)           ,
+    .s_axis_aresetn     (rst_n)             ,
+    .m_axis_tdata       (),
+    .m_axis_tkeep       (),
+    .m_axis_tlast       (),
+    .m_axis_tvalid      (),
+    .m_axis_tready      (),
+    
+    // this port wait for the data come from dinidma
+    .s_axis_tdata       (m0_axis_tohost_tdata),
+    .s_axis_tkeep       (m0_axis_tohost_tkeep),
+    .s_axis_tlast       (m0_axis_tohost_tlast),
+    .s_axis_tvalid      (m0_axis_tohost_tvalid),
+    .s_axis_tready      (m0_axis_tohost_tready)
+    
 );
 
 rw_nx_platform u_rw_nx_platform(
@@ -71,13 +149,15 @@ rw_nx_platform u_rw_nx_platform(
     .proc_hrdata              (proc_hrdata),
     .proc_hwdata              (proc_hwdata),
     .proc_hresp               (proc_hresp),
-    
+        
+    //      up stream fifo channel              //
     .m0_axis_tohost_tvalid    (m0_axis_tohost_tvalid),
     .m0_axis_tohost_tready    (m0_axis_tohost_tready),
     .m0_axis_tohost_tkeep     (m0_axis_tohost_tkeep),
     .m0_axis_tohost_tdata     (m0_axis_tohost_tdata),
     .m0_axis_tohost_tlast     (m0_axis_tohost_tlast),
     
+    //      down stream fifo channel            //
     .s1_axis_fromhost_tvalid  (s1_axis_fromhost_tvalid),
     .s1_axis_fromhost_tready  (s1_axis_fromhost_tready),
     .s1_axis_fromhost_tdata   (s1_axis_fromhost_tdata),
@@ -86,7 +166,6 @@ rw_nx_platform u_rw_nx_platform(
   
   
 );
-
 
 
 always begin
@@ -104,6 +183,7 @@ rst_n = 1'b0;
 #200
 rst_n = 1'b1;
 end
+
 task REG_WR;
     input [31:0] addr;
     input [31:0] data;
@@ -135,72 +215,213 @@ begin
     //proc_hwrite = 1'b1;
     proc_htrans = 2'b00;
     counter     = 16'd0;
-    s1_axis_fromhost_tvalid = 1'b0;
-    s1_axis_fromhost_tdata  = 64'b0;
-    s1_axis_fromhost_tkeep  = 8'b0;
-    s1_axis_fromhost_tlast  = 8'b0;
+
     down_data_counter       = 32'b0;
+    down_data_counter       = 32'b0;
+    simu_axis_tdata     = 64'b0;
+    simu_axis_tlast     = 1'b0;
+    simu_axis_tvalid     = 1'b0;
+    simu_axis_tkeep     = 8'b0;
+    
   end
   else begin
     proc_hsize = 2'b10;
     if(counter  != 16'd65530)
     counter     = counter + 1;
-
-    case(counter)
-        /////////////////////////////////////////////////////////////////////////////////
-        11:REG_WR(32'h60000000,32'h20000001);    
-            
-        21:REG_WR(32'h60000004,32'h60000100);
-        
-        31:REG_WR(32'h60000008,32'h44);
-            
-        41:REG_WR(32'h6000000c,32'h60000020);    
-        //////////////////////////////////////////////////////////////////////////////////
-        51:REG_WR(32'h60000010,32'h20000200);
-            
-        61:REG_WR(32'h60000014,32'h60000200);
-            
-        71:REG_WR(32'h60000018,32'h40);
-        
-        81:REG_WR(32'h6000001c,32'h60000020);
-        //////////////////////////////////////////////////////////////////////////////////
-        91:REG_WR(32'h60000020,32'h20000300);
-        
-        101:REG_WR(32'h60000024,32'h20000300);
-            
-        111:REG_WR(32'h60000028,32'h40);
-        
-        121:REG_WR(32'h6000002c,32'h2000030);
-        //////////////////////////////////////////////////////////////////////////////////
-        131:REG_WR(32'h60000030,32'h20000400);
-        
-        141:REG_WR(32'h60000034,32'h60000400);
-        
-        151:REG_WR(32'h60000038,32'h40);
-        
-        161:REG_WR(32'h6000003c,32'h60000040);
-        //////////////////////////////////////////////////////////////////////////////////
-        //          write the last lli          //
-        171:REG_WR(32'h60000040,32'h20000500);
-        
-        181:REG_WR(32'h60000044,32'h60000500);
-        
-        191:REG_WR(32'h60000048,32'h20000040);
-        
-        201:REG_WR(32'h6000004c,32'h00);
-        //////////////////////////////////////////////////////////////////////////////////
-        //          start the dinidma           //
-        500:REG_WR(32'h60000034,32'h60000000);
-        
-        505:REG_WR(32'h60000018,32'h0000000c);
-        
-        510:REG_WR(32'h60000000,32'h00000000);
-        
-        515:REG_WR(32'h60000004,32'h00000000);
-        
-        520:REG_WR(32'h60000008,32'h60000000);
     
-        525:REG_WR(32'h6000000c,32'h00000000);
+        //      write test data to the axis stream fifo     //
+        //node one
+        if(counter == 7)
+        begin
+            simu_axis_tvalid = 1'b1;
+            simu_axis_tdata  =  counter;
+            simu_axis_tkeep  =  4'hf;
+            simu_axis_tlast  =  1'b0;
+        end
+        else if(counter == 8)
+        begin
+            simu_axis_tvalid  = 1'b1;
+            simu_axis_tdata   = counter;
+            simu_axis_tkeep   = 4'hf;
+            simu_axis_tlast   = 1'b1;
+        end
+        //node two
+        else if(counter==9)
+        begin
+            simu_axis_tvalid  = 1'b1;
+            simu_axis_tdata   = counter;
+            simu_axis_tkeep   = 4'hf;
+            simu_axis_tlast   = 1'b0;
+        end
+        else if(counter==10)
+        begin
+            simu_axis_tvalid  = 1'b1;
+            simu_axis_tdata   = counter;
+            simu_axis_tkeep   = 4'hf;
+            simu_axis_tlast   = 1'b1;
+        end
+        //node three
+        else if(counter >= 12 && counter <=14)  //4x8=40 bytes
+        begin
+            simu_axis_tvalid  = 1'b1;
+            simu_axis_tdata   = counter;
+            simu_axis_tkeep   = 4'hf;
+            simu_axis_tlast   = 1'b0;            
+        end
+        else if(counter == 15)  //0x06
+        begin
+             simu_axis_tvalid  = 1'b1;
+             simu_axis_tdata   = counter;
+             simu_axis_tkeep   = 4'hf;
+             simu_axis_tlast   = 1'b1;            
+        end
+        //node four
+        else if(counter >= 16 && counter <=18)  //4x8=40 bytes
+        begin
+            simu_axis_tvalid  = 1'b1;
+            simu_axis_tdata   = counter;
+            simu_axis_tkeep   = 4'hf;
+            simu_axis_tlast   = 1'b0;            
+        end
+        else if(counter == 19)  //0x06
+        begin
+             simu_axis_tvalid  = 1'b1;
+             simu_axis_tdata   = counter;
+             simu_axis_tkeep   = 4'hf;
+             simu_axis_tlast   = 1'b1;            
+        end
+        //node five
+        else if(counter >= 20 && counter <=25)  //4x8=40 bytes
+        begin
+            simu_axis_tvalid  = 1'b1;
+            simu_axis_tdata   = counter;
+            simu_axis_tkeep   = 4'hf;
+            simu_axis_tlast   = 1'b0;            
+        end
+        else if(counter == 26)  //0x06
+        begin
+             simu_axis_tvalid  = 1'b1;
+             simu_axis_tdata   = counter;
+             simu_axis_tkeep   = 4'hf;
+             simu_axis_tlast   = 1'b1;            
+        end
+        
+//        else if(counter == 18 ) //0x08
+//        begin
+//            downfifo_axis_tvalid  = 1'b1;
+//            downfifo_axis_tdata   = 64'h0B;
+//            downfifo_axis_tkeep   = 8'b11111111;
+//            downfifo_axis_tlast   = 1'b1;
+//        end
+//        else if(counter == 19 ) //0x08
+//        begin
+//             downfifo_axis_tvalid  = 1'b1;
+//             downfifo_axis_tdata   = 64'h0C;
+//             downfifo_axis_tkeep   = 8'b00001111;
+//             downfifo_axis_tlast   = 1'b1;
+//        end
+        /*
+        else if(counter == 16)
+        begin
+            downfifo_axis_tvalid  = 1'b1;
+            downfifo_axis_tdata   = counter;
+            downfifo_axis_tkeep   = 8'b00001111;
+            downfifo_axis_tlast   = 1'b1;    
+        end
+        else if(counter >=20 && counter <= 26)
+        begin
+            downfifo_axis_tvalid  = 1'b1;
+            downfifo_axis_tdata   = counter;
+            downfifo_axis_tkeep   = 8'b11111111;
+            downfifo_axis_tlast   = 1'b0;        
+        end
+        else if(counter == 27)
+        begin
+            downfifo_axis_tvalid  = 1'b1;
+            downfifo_axis_tdata   = counter;
+            downfifo_axis_tkeep   = 8'b11111111;
+            downfifo_axis_tlast   = 1'b1;
+        end
+        /*
+        else if(counter == 24)
+        begin
+             downfifo_axis_tvalid  = 1'b1;
+             downfifo_axis_tdata   = counter;
+             downfifo_axis_tkeep   = 8'b11111111;
+             downfifo_axis_tlast   = 1'b0;
+        end
+        else if(counter == 25)
+        begin
+              downfifo_axis_tvalid  = 1'b1;
+              downfifo_axis_tdata   = counter;
+              downfifo_axis_tkeep   = 8'b00001111;
+              downfifo_axis_tlast   = 1'b1;
+        end
+        */
+        else
+        begin
+            simu_axis_tvalid  = 1'b0;
+            simu_axis_tlast   = 1'b0;
+            simu_axis_tkeep   = 8'b0;
+        end
+    case(counter)
+        //write five lli node to sram
+        //one node                
+        11:REG_WR(32'h60000000,32'h20000100);            
+        21:REG_WR(32'h60000004,32'h60000100);    
+        31:REG_WR(32'h60000008,32'h08);        
+        41:REG_WR(32'h6000000c,32'h60000020);
+        //two node                
+        51:REG_WR(32'h60000020,32'h20000200);        
+        61:REG_WR(32'h60000024,32'h60000200);        
+        71:REG_WR(32'h60000028,32'h08);    
+        81:REG_WR(32'h6000002c,32'h60000040);
+        //three node                
+        91:REG_WR(32'h60000040,32'h20000300);    
+        101:REG_WR(32'h60000044,32'h60000300);        
+        111:REG_WR(32'h60000048,32'h10);    
+        121:REG_WR(32'h6000004c,32'h20000060);
+        //four node       
+        131:REG_WR(32'h60000060,32'h20000400);    
+        141:REG_WR(32'h60000064,32'h60000400);    
+        151:REG_WR(32'h60000068,32'h10);    
+        161:REG_WR(32'h6000006c,32'h60000080);
+        //five node
+        //the last node
+        171:REG_WR(32'h60000080,32'h20000500);    
+        181:REG_WR(32'h60000084,32'h60000500);    
+        191:REG_WR(32'h60000088,32'h18);    
+        201:REG_WR(32'h6000008c,32'h0); 
+        ///////////////////////////////////////////////////////////////////////////////////
+        //          start the dinidma           //
+        //configure lli
+        300:REG_WR(32'h60A00034,32'h60000000);         
+        305:REG_WR(32'h60A00018,32'h0000000c);    
+        //write lli_root_reg3
+        310:REG_WR(32'h60A00000,32'h00000000);    
+        315:REG_WR(32'h60A00004,32'h00000000);    
+        320:REG_WR(32'h60A00008,32'h60000000);          
+        325:REG_WR(32'h60A0000c,32'h00000000);
+        /////////////////////////////////////////////////////////////////////////////////
+        //          update the lli list         //
+        400:REG_WR(32'h60000000,32'h60000100);            
+        410:REG_WR(32'h60000004,32'h20000100);
+        
+        420:REG_WR(32'h60000020,32'h60000200);        
+        430:REG_WR(32'h60000024,32'h20000200);
+        
+        440:REG_WR(32'h60000040,32'h60000300);    
+        450:REG_WR(32'h60000044,32'h20000300); 
+        
+        460:REG_WR(32'h60000060,32'h60000400);    
+        470:REG_WR(32'h60000064,32'h20000400);
+            
+        480:REG_WR(32'h60000080,32'h60000500);    
+        490:REG_WR(32'h60000084,32'h20000500);  
+        ///////////////////////////////////////////////////////////////////////////// 
+        //start the upstream channel with the dinidma                       
+        //500:REG_WR(32'h60A00008,32'h00000000);
+        //510:REG_WR(32'h60A00000,32'h60000000);     
         /////////////////////////////////////////////////////////
         //          start the mac init          //
         
@@ -399,10 +620,8 @@ begin
         
               
          //2.rx header descriptor
-         //sram中60000060为头部描述符
          `multiple*1510:REG_WR(32'h60000060,32'hBAADF00D);//upatternrx
          `multiple*1520:REG_WR(32'h60000064,32'h00000000);//next header descriptor pointer
-         //payload地址
          `multiple*1530:REG_WR(32'h60000068,32'h60000884);//first payload buffer descriptor pointer
          `multiple*1540:REG_WR(32'h6000006C,32'h60022246);//sw descriptor pointer
          `multiple*1550:REG_WR(32'h60000070,32'h60012264);//data start pointer
@@ -420,7 +639,6 @@ begin
          `multiple*1670:REG_WR(32'h60000100,32'h00000000);
              
           // set rx header head pointer register
-          // 向mac寄存器写入头部信息
          `multiple*1680:REG_WR(32'h60B081B8,32'h60000060);
          `multiple*1690:REG_WR(32'h60B08180,32'h04000000);//set RX header new Head 
          //////////////////////////////////////////////////////////////////////////////
@@ -430,16 +648,12 @@ begin
          `multiple*1720:REG_WR(32'h6000088C,32'h60012280);
          `multiple*1730:REG_WR(32'h60000890,32'h60012480);
          `multiple*1740:REG_WR(32'h60000894,32'h00000000);
-         
-         
        
            //////////////////////////////////////////////////////////////////////////////////
        
            `multiple*1750:REG_WR(32'h60B081BC,32'h60000884);
            
           `multiple*1760:REG_WR(32'h60B08180,32'h08000000);//new payload new head bit
-          
-           `multiple*1770:REG_WR(32'h60B00138,32'h00000100);
             ////////////////////// phy ////////////////////////////////////////
         
         530:REG_WR(32'h60C00000,32'h011EAD8F);
@@ -471,48 +685,70 @@ begin
         
         655:REG_WR(32'h60C08F04,32'h00000001); //change model
         // -- just for test
-        660:REG_WR(32'h60C10000,32'h00004411);
-        665:REG_WR(32'h60C10004,32'h00008822);
+        660:REG_WR(32'h60C10000,32'h00000012);
+        665:REG_WR(32'h60C10004,32'h00000034);
         
-        670:REG_WR(32'h60C10008,32'h0000CC33);
-        675:REG_WR(32'h60C1000C,32'h00011044);
-        680:REG_WR(32'h60C10010,32'h00015455);
+        670:REG_WR(32'h60C10008,32'h00000056);
+        675:REG_WR(32'h60C1000C,32'h00000078);
+        680:REG_WR(32'h60C10010,32'h0000009A);
         
-        685:REG_WR(32'h60C10014,32'h00019866);
-        690:REG_WR(32'h60C10018,32'h0001DC77); 
+        685:REG_WR(32'h60C10014,32'h000000BC);
+        690:REG_WR(32'h60C10018,32'h000000DE); 
         
-        695:REG_WR(32'h60C1001C,32'h00022088);
-        700:REG_WR(32'h60C10020,32'h00026499);
+        695:REG_WR(32'h60C1001C,32'h00000001);
+        700:REG_WR(32'h60C10020,32'h00000002);
         705:REG_RD(32'h60C10024,32'h12345603); 
-        
-       
     //////////////////////////////////////////////////////////////////////////////////
     default:begin
         proc_htrans = 2'b00;
         end 
                                             
-  endcase;
-     if(s1_axis_fromhost_tready)
-        begin
-        s1_axis_fromhost_tvalid = 1'b1;
-        s1_axis_fromhost_tkeep  = 8'b11111111;
-        s1_axis_fromhost_tdata  = 64'heb900000;
-        down_data_counter       = down_data_counter + 1;
-            if(down_data_counter == 32'h6)
-            begin
-                down_data_counter = 0;
-                s1_axis_fromhost_tlast = 1'b1;
-            end  
-            else
-                s1_axis_fromhost_tlast = 1'b0;  
-        end   
+  endcase;     
   end
 end
 
-//-------------------- random data ---------------------
+//start the dinidma
+//initial begin
 
+    
+//  #20000
+//  proc_haddr    = 32'h60a00034;
+//  proc_hwdata   = 32'h0000000c;
+//  proc_htrans   = 2'b10;  
+//  #400
+//  proc_htrans  = 2'b00;
+//  #400
+//  proc_haddr    = 32'h60a00018;
+//  proc_hwdata   = 32'h0000FFFF;
+//  proc_htrans   = 2'b10;
+//  #400
+//  proc_htrans   = 2'b00;
+//  #400
+//  proc_haddr    = 32'h60a00000;
+//  proc_hwdata   = 32'h60000000;
+//  proc_htrans   = 2'b10;
+//  #400
+//  proc_htrans   = 2'b00;
+//    #400
+//  proc_haddr    = 32'h60a00004;
+//  proc_hwdata   = 32'h60000000;
+//  proc_htrans   = 2'b10;
+//  #400
+//  proc_htrans   = 2'b00;
+//    #400
+//  proc_haddr    = 32'h60a00008;
+//  proc_hwdata   = 32'h60000000;
+//  proc_htrans   = 2'b10;
+//  #400
+//  proc_htrans   = 2'b00;
+//    #400
+//  proc_haddr    = 32'h60a0000c;
+//  proc_hwdata   = 32'h60000000;
+//  proc_htrans   = 2'b10;
+//  #400
+//  proc_htrans   = 2'b00;
+//end
 
 
 
 endmodule
-
