@@ -1,10 +1,28 @@
+//**********************************************************
+//
+// Copyright(c) 2017 . Outwitcom Technology Co., LTD.
+// All rights reserved.
+//
+// ProjectName :
+// target      :
+// FileName    : 
+// Author      :fengmaoqiao 
+// E_mail      :fengmaoqiao@outwitcom.com 
+// Date        :
+// Version     :
+//
+// Modification history
+//--------------------------------------------------------
+// $Log:$
+//
+//**********************************************************
 `timescale 1ns/10ps
 `define multiple 10
 
 module rw_nx_platform_sim(
 
 );
-
+//clock and reset
 wire clk_32k;
 wire clk_30m;
 wire clk_80m;
@@ -13,33 +31,33 @@ wire AD9361_clk;
 
 reg clk_80m_in;
 reg rst_n;
+//user port
+wire          proc_hready;
+reg   [31:0]  proc_haddr;
+reg   [1:0]   proc_htrans;
+reg           proc_hwrite;
+reg   [1:0]   proc_hsize;
+wire  [31:0]  proc_hrdata;
+reg   [31:0]  proc_hwdata;
+wire  [1:0]   proc_hresp;
 
-wire        proc_hready;
-reg [31:0]  proc_haddr;
-reg [1:0]   proc_htrans;
-reg         proc_hwrite;
-reg [1:0]   proc_hsize;
-wire [31:0] proc_hrdata;
-reg [31:0]  proc_hwdata;
-wire [1:0]  proc_hresp;
+wire          m0_axis_tohost_tvalid;
+wire          m0_axis_tohost_tready;
+wire [63:0]   m0_axis_tohost_tdata;
+wire [7:0]    m0_axis_tohost_tkeep;
+wire          m0_axis_tohost_tlast;
 
-wire        m0_axis_tohost_tvalid;
-wire        m0_axis_tohost_tready;
-wire [63:0] m0_axis_tohost_tdata;
-wire [7:0]  m0_axis_tohost_tkeep;
-wire        m0_axis_tohost_tlast;
-
-wire         s1_axis_fromhost_tvalid;
-wire         s1_axis_fromhost_tready;
-wire [63:0]  s1_axis_fromhost_tdata;
-wire [7:0]   s1_axis_fromhost_tkeep;
-wire         s1_axis_fromhost_tlast;
-
-reg [31:0]  simu_axis_tdata;
-reg [3:0]   simu_axis_tkeep;
-reg         simu_axis_tlast;
-reg         simu_axis_tvalid;
-wire        simu_axis_tready;
+wire          s1_axis_fromhost_tvalid;
+wire          s1_axis_fromhost_tready;
+wire [63:0]   s1_axis_fromhost_tdata;
+wire [7:0]    s1_axis_fromhost_tkeep;
+wire          s1_axis_fromhost_tlast;
+//input simulate data interface
+reg [31:0]    simu_axis_tdata;
+reg [3:0]     simu_axis_tkeep;
+reg           simu_axis_tlast;
+reg           simu_axis_tvalid;
+wire          simu_axis_tready;
 
 parameter PERIOD_15m = 66.66;
 parameter PERIOD_30m = 33.33;
@@ -53,6 +71,10 @@ wire        axis_fifo_tready;
 wire        axis_fifo_tlast;
 
 
+//**********************************************************
+// DCM declare
+//**********************************************************
+
 clk_wiz_0 u_clk_wiz_0(
     .clk_in1          (clk_80m_in),
     
@@ -63,7 +85,9 @@ clk_wiz_0 u_clk_wiz_0(
 );
 
 
-
+//**********************************************************
+// down channel begin
+//**********************************************************
 dma_if_32to64_0 u_dma_if_32to64(
 
 
@@ -81,10 +105,7 @@ dma_if_32to64_0 u_dma_if_32to64(
     .m1_axis_fromhost_tkeep       (axis_fifo_tkeep),
     .m1_axis_fromhost_tdata       (axis_fifo_tdata),
     .m1_axis_fromhost_tlast       (axis_fifo_tlast)
-
-
 );
-
 
 
 axis_data_fifo_0 u_axis_data_fifo_0(
@@ -107,17 +128,35 @@ axis_data_fifo_0 u_axis_data_fifo_0(
     //      datain port to this fifo                //
 
 );
+//**********************************************************
+// up channel wire connect
+//**********************************************************
+wire [63:0] axis_upfifO_tdata;
+wire        axis_upfifo_tvalid;
+wire [7:0]  axis_upfifo_tkeep;
+wire        axis_upfifo_tready;
+wire        axis_upfifo_tlast;
 
+wire [31:0] view_upfifO_tdata;
+wire        view_upfifo_tvalid;
+wire [3:0]  view_upfifo_tkeep;
+reg         view_upfifo_tready;
+wire        view_upfifo_tlast;
 
+//**********************************************************
+// upstream 64b axi_stream data fifo,
+// receive the data from main instance
+//**********************************************************
 axis_data_fifo_0 u_axis_data_fifo_up_0(
 
     .s_axis_aclk        (clk_80m)           ,
     .s_axis_aresetn     (rst_n)             ,
-    .m_axis_tdata       (),
-    .m_axis_tkeep       (),
-    .m_axis_tlast       (),
-    .m_axis_tvalid      (),
-    .m_axis_tready      (),
+    
+    .m_axis_tdata       (axis_upfifO_tdata),
+    .m_axis_tkeep       (axis_upfifo_tkeep),
+    .m_axis_tlast       (axis_upfifo_tlast),
+    .m_axis_tvalid      (axis_upfifo_tvalid),
+    .m_axis_tready      (axis_upfifo_tready),
     
     // this port wait for the data come from dinidma
     .s_axis_tdata       (m0_axis_tohost_tdata),
@@ -128,6 +167,30 @@ axis_data_fifo_0 u_axis_data_fifo_up_0(
     
 );
 
+
+//**********************************************************
+// upstream  64 convert the 64b fifo data to 32b data instance
+//**********************************************************
+dma_if_64to32_0 u_dma_if_64to32(
+
+    .clk                        (clk_80m)               ,
+    .rst_n                      (rst_n)                 ,
+    //net from up fifo
+    .s0_axis_tohost_tdata     (axis_upfifO_tdata)       ,
+    .s0_axis_tohost_tkeep     (axis_upfifo_tkeep)       ,
+    .s0_axis_tohost_tvalid    (axis_upfifo_tvalid)      ,
+    .s0_axis_tohost_tready    (axis_upfifo_tready)      ,
+    .s0_axis_tohost_tlast     (axis_upfifo_tlast)       ,
+    //net to simu
+    .m0_axis_tohost_tvalid      (view_upfifo_tvalid)    ,
+    .m0_axis_tohost_tready      (view_upfifo_tready)    ,
+    .m0_axis_tohost_tkeep       (view_upfifo_tkeep)     ,
+    .m0_axis_tohost_tdata       (view_upfifo_tdata)     ,
+    .m0_axis_tohost_tlast       (view_upfifo_tlast)
+);
+//**********************************************************
+//generate main instance and connect signal
+//**********************************************************
 rw_nx_platform u_rw_nx_platform(
     .clk_32k                  (0),
     .clk_30m                  (clk_30m),
@@ -168,6 +231,9 @@ rw_nx_platform u_rw_nx_platform(
 );
 
 
+//**********************************************************
+//simulate time generate,this send to DCM
+//**********************************************************
 always begin
   clk_80m_in = 1'b0;
   #(PERIOD_80m/2) clk_80m_in = 1'b1;
@@ -178,12 +244,18 @@ end
 reg [31:0] counter;
 reg [31:0] down_data_counter;
 
+//**********************************************************
+//generate reset signal
+//**********************************************************
 initial begin
 rst_n = 1'b0;
 #200
 rst_n = 1'b1;
 end
 
+//**********************************************************
+//register write and read task
+//**********************************************************
 task REG_WR;
     input [31:0] addr;
     input [31:0] data;
@@ -206,7 +278,9 @@ task REG_RD;
         proc_hwdata = data;
     end
 endtask
-//write lli into the sram
+//**********************************************************
+//main process to simulate
+//**********************************************************
 always@(posedge clk_80m or negedge rst_n)
 begin
 
@@ -218,19 +292,25 @@ begin
 
     down_data_counter       = 32'b0;
     down_data_counter       = 32'b0;
-    simu_axis_tdata     = 64'b0;
-    simu_axis_tlast     = 1'b0;
-    simu_axis_tvalid     = 1'b0;
-    simu_axis_tkeep     = 8'b0;
+    simu_axis_tdata         = 64'b0;
+    simu_axis_tlast         = 1'b0;
+    simu_axis_tvalid        = 1'b0;
+    simu_axis_tkeep         = 8'b0;
     
-  end
-  else begin
+    view_upfifo_tready      = 1'b1;
+    
+    end
+    else begin
     proc_hsize = 2'b10;
     if(counter  != 16'd65530)
     counter     = counter + 1;
     
-        //      write test data to the axis stream fifo     //
-        //node one
+
+//**********************************************************
+// write simulate date to down fifo and start dinidma to tran data from
+// data to sram
+//**********************************************************
+        //add node one
         if(counter == 7)
         begin
             simu_axis_tvalid = 1'b1;
@@ -420,8 +500,8 @@ begin
         490:REG_WR(32'h60000084,32'h20000500);  
         ///////////////////////////////////////////////////////////////////////////// 
         //start the upstream channel with the dinidma                       
-        //500:REG_WR(32'h60A00008,32'h00000000);
-        //510:REG_WR(32'h60A00000,32'h60000000);     
+        500:REG_WR(32'h60A00008,32'h00000000);
+        510:REG_WR(32'h60A00000,32'h60000000);     
         /////////////////////////////////////////////////////////
         //          start the mac init          //
         
