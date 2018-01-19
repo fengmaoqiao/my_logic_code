@@ -306,10 +306,10 @@ begin
     counter     = counter + 1;
     
 
-//**********************************************************
-// write simulate date to down fifo and start dinidma to tran data from
-// data to sram
-//**********************************************************
+        //**********************************************************
+        // write simulate date to down fifo and start dinidma to tran data from
+        // data to sram
+        //**********************************************************
         //add node one
         if(counter == 7)
         begin
@@ -447,6 +447,9 @@ begin
     case(counter)
         //write five lli node to sram
         //one node                
+        //**********************************************************
+        //  添加LLI链表节点到SRAM中
+        //**********************************************************
         11:REG_WR(32'h60000000,32'h20000100);            
         21:REG_WR(32'h60000004,32'h60000100);    
         31:REG_WR(32'h60000008,32'h08);        
@@ -498,13 +501,14 @@ begin
             
         480:REG_WR(32'h60000080,32'h60000500);    
         490:REG_WR(32'h60000084,32'h20000500);  
-        ///////////////////////////////////////////////////////////////////////////// 
-        //start the upstream channel with the dinidma                       
+        //**********************************************************
+        //  当DiniDMA发送完成以及接收LLI配置后启动上行DiniDMA
+        //**********************************************************
         500:REG_WR(32'h60A00008,32'h00000000);
         510:REG_WR(32'h60A00000,32'h60000000);     
-        /////////////////////////////////////////////////////////
-        //          start the mac init          //
-        
+        //**********************************************************
+        //  MAC寄存器初始化
+        //**********************************************************
         `multiple*600:REG_WR(32'h60900068,32'h8000000c);
         
         `multiple*605:REG_WR(32'h60900068,32'h8000000c); 
@@ -515,86 +519,88 @@ begin
         
         `multiple*620:REG_WR(32'h6080010c,32'hef22);
        
-        `multiple*625:REG_WR(32'h60A00034,32'hc);
+        `multiple*625:REG_WR(32'h60A00034,32'hc);             //DiniDMA set
        
-        `multiple*630:REG_WR(32'h60A00018,32'hffff);
+        `multiple*630:REG_WR(32'h60A00018,32'hffff);          //DiniDMA set
        
-        `multiple*635:REG_WR(32'h60B08050,32'h1);
+        `multiple*635:REG_WR(32'h60B08050,32'h1);             //MAC控制器寄存器
        
-        `multiple*640:REG_WR(32'h60B08074,32'h8333f10c);
+        `multiple*640:REG_WR(32'h60B08074,32'h8333f10c);     //通用中断设置
         
-        `multiple*645:REG_WR(32'h60B08080,32'h800A07C0);
+        `multiple*645:REG_WR(32'h60B08080,32'h800A07C0);     //收发中断设置
         
-        `multiple*650:REG_WR(32'h60B0004C,32'hcfc1);
+        `multiple*650:REG_WR(32'h60B0004C,32'hcfc1);         //MAC控制器寄存器1
         
-        `multiple*655:REG_WR(32'h60B00054,32'h000000);//WL:disable rxFlowCntrlEn bit
+        `multiple*655:REG_WR(32'h60B00054,32'h000000);//WL:disable rxFlowCntrlEn bit        MAC错误恢复寄存器
        
-        `multiple*660:REG_WR(32'h60B00060,32'h7ffffffe);//receive contrl register
+        `multiple*660:REG_WR(32'h60B00060,32'h7ffffffe);//receive contrl register           接收控制寄存器
        
-        `multiple*665:REG_WR(32'h60B00114,32'h401A);
+        `multiple*665:REG_WR(32'h60B00114,32'h401A);         //接收触发时间寄存器
         
-        `multiple*670:REG_WR(32'h60B00064,32'hff900064);
+        `multiple*670:REG_WR(32'h60B00064,32'hff900064);     //Beacon控制寄存器
         
-        `multiple*675:REG_WR(32'h60B00150,32'h1000);
+        `multiple*675:REG_WR(32'h60B00150,32'h1000);         //最大接收长度寄存器
         
-        `multiple*680:REG_WR(32'h60B0004C,32'h4fc1);
+        `multiple*680:REG_WR(32'h60B0004C,32'h4fc1);         //MAC控制寄存器
         
-        `multiple*685:REG_WR(32'h60B00224,32'h0);
+        `multiple*685:REG_WR(32'h60B00224,32'h0);            //EDCA控制寄存器
         
-        `multiple*690:REG_WR(32'h60B000A0,32'h2020);
+        `multiple*690:REG_WR(32'h60B000A0,32'h2020);         //最大功率级别寄存器
         
-        `multiple*695:REG_WR(32'h60B0004C,32'h5fc1);
+        `multiple*695:REG_WR(32'h60B0004C,32'h5fc1);         //MAC控制器寄存器1
         
-        `multiple*670:REG_WR(32'h60B0004C,32'h5fc1);
+        `multiple*670:REG_WR(32'h60B0004C,32'h5fc1);         //MAC控制器寄存器1
         
-        `multiple*675:REG_WR(32'h60B0004C,32'h5fc1);
+        `multiple*675:REG_WR(32'h60B0004C,32'h5fc1);         //MAC控制器寄存器1
         
-        `multiple*680:REG_WR(32'h60B0004C,32'h5fc1);
+        `multiple*680:REG_WR(32'h60B0004C,32'h5fc1);         //MAC控制器寄存器1
         
-        `multiple*700:REG_WR(32'h60B0004C,32'h6fc1);
+        `multiple*700:REG_WR(32'h60B0004C,32'h6fc1);         //MAC控制器寄存器1
         
-        `multiple*705:REG_WR(32'h60B00510,32'h1c25);
+        `multiple*705:REG_WR(32'h60B00510,32'h1c25);         //调试接口选择
         
-        `multiple*710:REG_WR(32'h60B081B8,32'h60000060);
+        `multiple*710:REG_WR(32'h60B081B8,32'h60000060);     //接收头部指针
         
-        `multiple*715:REG_WR(32'h60B08180,32'h4000000);
+        `multiple*715:REG_WR(32'h60B08180,32'h4000000);      //DMA Engine设置
         
-        `multiple*720:REG_WR(32'h60B081BC,32'h60000884);
+        `multiple*720:REG_WR(32'h60B081BC,32'h60000884);     //接收Payload指针
         
-        `multiple*725:REG_WR(32'h60B08180,32'h8000000);
+        `multiple*725:REG_WR(32'h60B08180,32'h8000000);      //DMA Engine设置
         
-        `multiple*730:REG_WR(32'h60B0004c,32'h4fc1);
+        `multiple*730:REG_WR(32'h60B0004c,32'h4fc1);         //MAC控制器寄存器1
         
-        `multiple*735:REG_WR(32'h60B0004c,32'h4fc1);
+        `multiple*735:REG_WR(32'h60B0004c,32'h4fc1);         //MAC控制器寄存器1
         
-        `multiple*740:REG_WR(32'h60B0001c,32'h0);
+        `multiple*740:REG_WR(32'h60B0001c,32'h0);            //MAC地址高位
         
-        `multiple*745:REG_WR(32'h60B08074,32'h8333f10c);
+        `multiple*745:REG_WR(32'h60B08074,32'h8333f10c);     //通用中断掩码
         
-        `multiple*750:REG_WR(32'h60B080A4,32'h0);
+        `multiple*750:REG_WR(32'h60B080A4,32'h0);            //TSF Timer Low
         
-        `multiple*755:REG_WR(32'h60B080A8,32'h0);
+        `multiple*755:REG_WR(32'h60B080A8,32'h0);            //TSF Timer High
         
-        `multiple*760:REG_WR(32'h60B00010,32'h3344e022);
+        `multiple*760:REG_WR(32'h60B00010,32'h3344e022);     //MAC地址低位
         
-        `multiple*765:REG_WR(32'h60B00014,32'h55e0);
+        `multiple*765:REG_WR(32'h60B00014,32'h55e0);         //MAC地址高位
         
-        `multiple*770:REG_WR(32'h60B0004C,32'h48c1);
+        `multiple*770:REG_WR(32'h60B0004C,32'h48c1);         //MAC控制器寄存器1
         
         //`multiple*775:REG_WR(32'h60B00060,32'h3503859c);
-         `multiple*775:REG_WR(32'h60B00060,32'h7ffffffe);
+         `multiple*775:REG_WR(32'h60B00060,32'h7ffffffe);    //接收控制
         
-        `multiple*780:REG_WR(32'h60B000E8,32'h70809);
+        `multiple*780:REG_WR(32'h60B000E8,32'h70809);        //Timings 2
         
-        `multiple*785:REG_WR(32'h60B00038,32'h30);
+        `multiple*785:REG_WR(32'h60B00038,32'h30);           //MAC core状态寄存器
         
-        `multiple*790:REG_WR(32'h60B000E8,32'h70809);
+        `multiple*790:REG_WR(32'h60B000E8,32'h70809);        //Timing 2
         
-        `multiple*800:REG_WR(32'h60B00038,32'h30);
+        `multiple*800:REG_WR(32'h60B00038,32'h30);           //MAC core状态寄存器
         
         //`multiple*805:REG_RD(32'h60B00038);
         
-        //Construct header and payload
+        //**********************************************************
+        //  为MAC TX构造发送数据包
+        //**********************************************************
         //1.payload of MAC header= 28 bytes
         `multiple*810:REG_WR(32'h60008bb0,32'h00000148);
         //`multiple*810:REG_WR(32'h60008bb0,32'h000001C8);change to Qos NULL frame
@@ -734,14 +740,16 @@ begin
            `multiple*1750:REG_WR(32'h60B081BC,32'h60000884);
            
           `multiple*1760:REG_WR(32'h60B08180,32'h08000000);//new payload new head bit
-            ////////////////////// phy ////////////////////////////////////////
         
-        530:REG_WR(32'h60C00000,32'h011EAD8F);
-        535:REG_WR(32'h60C00004,32'h00000100);
-        540:REG_WR(32'h60C00018,32'h6a6a6a6a);
-        545:REG_WR(32'h60C0001C,32'h6a6a6a6a);
-        550:REG_WR(32'h60C00020,32'h00040000);
-        555:REG_WR(32'h60C00034,32'h00000020);
+        //**********************************************************
+        //  初始化物理层
+        //**********************************************************
+        530:REG_WR(32'h60C00000,32'h011EAD8F);        //MDMaTXCNTL
+        535:REG_WR(32'h60C00004,32'h00000100);        //MDMaTXIQCOMP
+        540:REG_WR(32'h60C00018,32'h6a6a6a6a);        //MDMaRXCNTL0
+        545:REG_WR(32'h60C0001C,32'h6a6a6a6a);        //MDMaRXCNTL1
+        550:REG_WR(32'h60C00020,32'h00040000);        //MDMaEQCNTL2
+        555:REG_WR(32'h60C00034,32'h00000020);        //MDMaTXCONST
         560:REG_WR(32'h60C00024,32'h00000000);
         565:REG_WR(32'h60C00028,32'h00000000);
         570:REG_WR(32'h60C02004,32'h00000001);
@@ -751,8 +759,8 @@ begin
         590:REG_WR(32'h60C09010,32'h10080212);
         
         595:REG_WR(32'h60C0000C,32'h00017000);
-        600:REG_WR(32'h60C00008,32'h59141165);
-        605:REG_WR(32'h60C0002c,32'h01192a30);
+        600:REG_WR(32'h60C00008,32'h59141165);        //MDMaRXCNTL0
+        605:REG_WR(32'h60C0002c,32'h01192a30);        //MDMaRXCNTL1
         610:REG_WR(32'h60C0a020,32'h400131f3);
         615:REG_WR(32'h60C08000,32'h00000002);
         620:REG_WR(32'h60C08004,32'h00000001);

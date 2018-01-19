@@ -46,9 +46,9 @@ reg [2:0] next_state;
 //**********************************************************
 //Main Code
 //**********************************************************
-localparam S_IDLE = 3'b000;
-localparam S_RD1  = 3'b001;
-localparam S_RD2  = 3'b010;
+localparam S_IDLE = 3'b001;
+localparam S_RD1  = 3'b010;
+localparam S_RD2  = 3'b100;
  
 always @(posedge clk or negedge rst_n)begin
     if(!rst_n)begin
@@ -107,15 +107,15 @@ begin
                 end
              S_RD1:begin
                  s0_axis_tohost_tready <= 1'b1;
-                 m0_axis_tohost_tvalid <= 1'b1;
+                 m0_axis_tohost_tlast <= 1'b0;
                  m0_axis_tohost_tkeep  <= 4'hf;
                  //In S_RD1,give out_date from in_data high dword
                  m0_axis_tohost_tdata  <= s0_axis_tohost_tdata[63:32];
                  //desicion this dword or next dword give the tlast
                  if(s0_axis_tohost_tkeep == 8'h0f && s0_axis_tohost_tlast)
-                     m0_axis_tohost_tlast <= 1'b1;
+                     m0_axis_tohost_tvalid <= 1'b0;
                  else
-                     m0_axis_tohost_tlast <= 1'b0;
+                     m0_axis_tohost_tvalid <= 1'b1;
                 end
              S_RD2:begin
                  s0_axis_tohost_tready <= 1'b0;
@@ -125,7 +125,7 @@ begin
                  m0_axis_tohost_tdata <= s0_axis_tohost_tdata[31:0];
                  //desicion the tlast value
                  
-                 if(s0_axis_tohost_tkeep == 8'hff && s0_axis_tohost_tlast)
+                 if(s0_axis_tohost_tlast)
                     m0_axis_tohost_tlast <= 1'b1;
                  else
                     m0_axis_tohost_tlast <= 1'b0;            
