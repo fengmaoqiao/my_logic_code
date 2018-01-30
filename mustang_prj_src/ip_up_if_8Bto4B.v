@@ -74,7 +74,7 @@ always @(*)begin
         //
         S_RD1:begin
             if(m0_axis_tohost_tready)begin
-                 next_state = S_RD2;                
+                next_state = S_RD2;                
             end
             else begin
                 next_state = S_IDLE;
@@ -100,17 +100,17 @@ begin
      else begin
          case(current_state)
              S_IDLE:begin
-                 m0_axis_tohost_tvalid <= 1'b0;
-                 m0_axis_tohost_tdata <= 32'b0;
-                 m0_axis_tohost_tkeep <= 4'b0;
-                 m0_axis_tohost_tlast <= 1'b0;
-                end
+                 m0_axis_tohost_tvalid  <= 1'b0;
+                 m0_axis_tohost_tdata   <= 32'b0;
+                 m0_axis_tohost_tkeep   <= 4'b0;
+                 m0_axis_tohost_tlast   <= 1'b0;
+               end
              S_RD1:begin
-                 s0_axis_tohost_tready <= 1'b1;
-                 m0_axis_tohost_tlast <= 1'b0;
-                 m0_axis_tohost_tkeep  <= 4'hf;
+                 s0_axis_tohost_tready  <= 1'b1;
+                 m0_axis_tohost_tlast   <= 1'b0;
+                 m0_axis_tohost_tkeep   <= 4'hf;
                  //In S_RD1,give out_date from in_data high dword
-                 m0_axis_tohost_tdata  <= s0_axis_tohost_tdata[63:32];
+                 m0_axis_tohost_tdata   <= s0_axis_tohost_tdata[63:32];
                  //desicion this dword or next dword give the tlast
                  if(s0_axis_tohost_tkeep == 8'h0f && s0_axis_tohost_tlast)
                      m0_axis_tohost_tvalid <= 1'b0;
@@ -118,11 +118,11 @@ begin
                      m0_axis_tohost_tvalid <= 1'b1;
                 end
              S_RD2:begin
-                 s0_axis_tohost_tready <= 1'b0;
-                 m0_axis_tohost_tvalid <= 1'b1;
-                 m0_axis_tohost_tkeep <= 4'hf;
+                 s0_axis_tohost_tready  <= 1'b0;
+                 m0_axis_tohost_tvalid  <= 1'b1;
+                 m0_axis_tohost_tkeep   <= 4'hf;
                  //In S_RD2,give out_data from in_data low dword
-                 m0_axis_tohost_tdata <= s0_axis_tohost_tdata[31:0];
+                 m0_axis_tohost_tdata   <= s0_axis_tohost_tdata[31:0];
                  //desicion the tlast value
                  
                  if(s0_axis_tohost_tlast)

@@ -1,4 +1,3 @@
-
 //**********************************************************
 //
 // Copyright(c) 2017 . Outwitcom Technology Co., LTD.
@@ -19,194 +18,154 @@
 //
 //**********************************************************
 `default_nettype wire
+`define simu_on 0
+
 module dma_interface(
-        //clock and reset        
-        input                       clk                         ,
-        input                       rst_n                       ,
-        
-        //Dinidma bus interface
-        //upstream interface
+  //clock and reset        
+  input                       clk                         ,
+  input                       rst_n                       ,
+  
+  /***********************************************************
+  * Upstream channel associate with DiniDMA 
+  ***********************************************************/
+  output  reg [63:0]              dma0_fromhost_data          ,
+  output  reg [ 7:0]              dma0_fromhost_ctrl          ,
+  output  reg                     dma0_fromhost_valid         ,
+  input                           dma0_fromhost_accept        ,
+  
+  input   [63:0]                  dma0_tohost_data            ,
+  input   [ 7:0]                  dma0_tohost_ctrl            ,
+  input                           dma0_tohost_valid           ,
+  output  wire                    dma0_tohost_almost_full     ,
+  /***********************************************************
+  * Downstream channel associate with DiniDMA
+  ***********************************************************/
+  output  wire [63:0]             dma1_fromhost_data          ,
+  output  wire [7:0]              dma1_fromhost_ctrl          ,
+  output  wire                    dma1_fromhost_valid         ,
+  input                           dma1_fromhost_accept        ,
 
-        output  reg [63:0]              dma0_fromhost_data          ,
-        
-        output  reg [ 7:0]              dma0_fromhost_ctrl          ,
-        
-        output  reg                     dma0_fromhost_valid         ,
-        
-        input                           dma0_fromhost_accept        ,
-
-        
-        input   [63:0]                  dma0_tohost_data            ,
-        
-        input   [ 7:0]                  dma0_tohost_ctrl            ,
-        
-        input                           dma0_tohost_valid           ,
-        
-        output  wire                    dma0_tohost_almost_full      ,
-        //downstream interface 
-        //Data and Ack backward to underlayer
-        
-        output  wire [63:0]             dma1_fromhost_data          ,
-        
-        output  wire [7:0]              dma1_fromhost_ctrl          ,
-        
-        output  wire                    dma1_fromhost_valid         ,
-        
-        input                           dma1_fromhost_accept        ,
-
-        //Req forward to this module
-        input       [63:0]              dma1_tohost_data            ,
-        
-        input       [ 7:0]              dma1_tohost_ctrl            ,
-        
-        input                           dma1_tohost_valid           ,
-        
-        output  reg                     dma1_tohost_almost_full      ,
-        
-        //axi stream bus interface
-        //upstream
-        input                           s0_axis_fromhost_tvalid         ,
-        
-        output reg                      s0_axis_fromhost_tready         ,
-        
-        input  [63:0]                   s0_axis_fromhost_tdata          ,
-        
-        input  [7:0]                    s0_axis_fromhost_tkeep          ,
-        
-        input                           s0_axis_fromhost_tlast          ,
-        
-                 
-        output wire                     m0_axis_tohost_tvalid          ,
-        
-        input                           m0_axis_tohost_tready          ,
-        
-        output wire [63:0]              m0_axis_tohost_tdata           ,
-        
-        output wire [7:0]               m0_axis_tohost_tkeep           ,
-        
-        output                          m0_axis_tohost_tlast           ,
-        //downstream 
-        //Fifo write to DMA Interface channel ,for data
-        
-        input                           s1_axis_fromhost_tvalid   ,
-        
-        output wire                     s1_axis_fromhost_tready   ,  //DMA Interface can receive data?
-        
-        input     [63:0]                s1_axis_fromhost_tdata    ,
-        
-        input     [7:0]                 s1_axis_fromhost_tkeep    ,
-                       
-        input                           s1_axis_fromhost_tlast    ,  //the tranfer end
-        
-        
-        output reg                      m1_axis_tohost_tvalid     ,
-        
-        input                           m1_axis_tohost_tready     ,
-        
-        output reg [63:0]               m1_axis_tohost_tdata      ,
-        
-        output reg [7:0]                m1_axis_tohost_tkeep      ,
-        
-        output reg                      m1_axis_tohost_tlast      
-      
-                                        
-        
+  input       [63:0]              dma1_tohost_data            ,
+  input       [ 7:0]              dma1_tohost_ctrl            ,
+  input                           dma1_tohost_valid           ,
+  output  reg                     dma1_tohost_almost_full     ,
+ 
+  /***********************************************************
+  * Upstream axi stream fifo Interface
+  ***********************************************************/
+  input                           s0_axis_fromhost_tvalid     ,
+  output reg                      s0_axis_fromhost_tready     ,
+  input  [63:0]                   s0_axis_fromhost_tdata      ,
+  input  [7:0]                    s0_axis_fromhost_tkeep      ,
+  input                           s0_axis_fromhost_tlast      ,
+  
+  output wire                     m0_axis_tohost_tvalid       ,
+  input                           m0_axis_tohost_tready       ,
+  output wire [63:0]              m0_axis_tohost_tdata        ,
+  output reg  [7:0]               m0_axis_tohost_tkeep        ,
+  output                          m0_axis_tohost_tlast        ,
+  /***********************************************************
+  * Downstream axi stream fifo Interface 
+  ***********************************************************/
+  input                           s1_axis_fromhost_tvalid     ,
+  output wire                     s1_axis_fromhost_tready     ,  
+  input     [63:0]                s1_axis_fromhost_tdata      ,
+  input     [7:0]                 s1_axis_fromhost_tkeep      ,
+  input                           s1_axis_fromhost_tlast      ,  
+  
+  output reg                      m1_axis_tohost_tvalid       ,
+  input                           m1_axis_tohost_tready       ,
+  output reg [63:0]               m1_axis_tohost_tdata        ,
+  output reg [7:0]                m1_axis_tohost_tkeep        ,
+  output reg                      m1_axis_tohost_tlast      
         
         );
         
-        //  --------------------------------------------------------------------------------
-      (* syn_keep="true" *)reg           state_data;
-      (* syn_keep="true" *)reg [63:0]    dma1_fromhost_data_temp;
-      (* syn_keep="true" *)reg           dma1_fromhost_valid_temp;      
-      (* syn_keep="true" *)reg [7:0]     dma1_fromhost_ctrl_temp;
-                        
-      (* syn_keep="true" *)wire [7:0]    dma1_fromhost_ctrl_end;
-      
-      (* syn_keep="true" *)assign        dma1_fromhost_data      =       state_data ? s1_axis_fromhost_tdata   : dma1_fromhost_data_temp;
-      (* syn_keep="true" *)assign        dma1_fromhost_valid     =       state_data ? s1_axis_fromhost_tvalid  : dma1_fromhost_valid_temp;    
-      (* syn_keep="true" *)assign        s1_axis_fromhost_tready =       state_data ? dma1_fromhost_accept  : 1'b0;      
-      (* syn_keep="true" *)assign        dma1_fromhost_ctrl      =       (s1_axis_fromhost_tlast && s1_axis_fromhost_tready && s1_axis_fromhost_tvalid) ? 
-        (dma1_fromhost_ctrl_end)
-      : (dma1_fromhost_ctrl_temp);
-      
-         // (dma1_fromhost_ctrl_end & {8{dma1_fromhost_accept}} & {8{dma1_fromhost_valid}}) 
-       // : (dma1_fromhost_ctrl_temp & {8{dma1_fromhost_accept}} & {8{dma1_fromhost_valid_temp}});
+  /**********************************************************
+  * FSM state Declation
+  **********************************************************/
+  localparam  DOWN_IDLE     = 4'd1,
+              DOWN_ACK_1    = 4'd2,
+              DOWN_ACK_2    = 4'd4,
+              DOWN_DATA     = 4'd8;
+  
+  localparam  UP_IDLE       = 8'd1,
+              UP_DATA       = 8'd2,
+              UP_REQ2       = 8'd4,
+              UP_ACK_1      = 8'd8,
+              UP_ACK_2      = 8'd16,
+              UP_DATA_END   = 8'd32;
+  
+  localparam  S_UPSTREAM    = 2'd0,
+              S_DOWNSREAM   = 2'd1;
+  
+
+  /***********************************************************
+  * Signal Declation
+  ***********************************************************/
+  reg           state_data;
+  reg  [63:0]   dma1_fromhost_data_temp;
+  reg           dma1_fromhost_valid_temp;      
+  reg  [7:0]    dma1_fromhost_ctrl_temp;
+  wire [7:0]    dma1_fromhost_ctrl_end;
              
-      (* syn_keep="true" *)assign        dma1_fromhost_ctrl_end = (s1_axis_fromhost_tkeep <=8'b00001111) ? 8'b00010100 : 8'b00011100; 
-     
-      reg           req_data_switch;
-     
-      reg [63:0]    dma0_tohost_data_temp;
-     
-      reg           dma0_tohost_valid_temp;
+  reg           req_data_switch;
+  reg  [63:0]   dma0_tohost_data_temp;
+  reg           dma0_tohost_valid_temp;
       
+  reg  [31:0]   up_tag_num;
+  reg  [15:0]   up_data_length;
+  reg  [15:0]   count;
       
-      reg [31:0] up_tag_num;
-      reg [15:0] up_data_length;
-      reg [15:0] count;
-      
-      (* syn_keep="true" *)assign        m0_axis_tohost_tdata      =         req_data_switch ? dma0_tohost_data      : dma0_tohost_data_temp;
-      (* syn_keep="true" *)assign        m0_axis_tohost_tvalid     =         req_data_switch ? dma0_tohost_valid     : dma0_tohost_valid_temp;
-      (* syn_keep="true" *)assign        m0_axis_tohost_tkeep      =         (dma0_tohost_ctrl[3] == 1'b1 && up_data_length[0] == 1'b1) ? 8'b0000_1111 : 8'b1111_1111;  
-      (* syn_keep="true" *)assign        dma0_tohost_almost_full   =         req_data_switch ? (~m0_axis_tohost_tready) : 1'b0; 
+  reg  [3:0]    tag_num;
+  reg  [15:0]   cnt_tohost_data;
+  reg  [15:0]   length_transfer_words;
+  //the bytes length in this transfer,from req
+  reg  [15:0]   bytes_transfer;
+  
+  reg  [7:0]    down_state; 
+  reg  [7:0]    up_state;
+  
+  reg  [63:0]   current_req;
+  wire [15:0]   current_length_int;
+  
+  reg  [31:0]   current_length;
+  reg  [2:0]    down_dst_addr;
+  reg  [2:0]    up_src_addr;
 
+  wire          down_last_be;
+  /***********************************************************
+  * Signal for the FIFO
+  ***********************************************************/
+  wire          fifo_full;
+  reg [63:0]    fifo_din;
+  reg           fifo_wr_en;
+  
+  wire          fifo_empty;
+  wire [63:0]   fifo_dout;
+  reg           fifo_rd_en;
+  
+  wire [5:0]    write_count;
+  wire [5:0]    read_count;
+  /***********************************************************
+  * Assign combinatory logic
+  ***********************************************************/
+  /*  Downstream Channel  */
+  assign   down_last_be               =       s1_axis_fromhost_tlast & s1_axis_fromhost_tready & s1_axis_fromhost_tvalid;
+  assign   dma1_fromhost_data         =       state_data ? s1_axis_fromhost_tdata   : dma1_fromhost_data_temp;
+  assign   dma1_fromhost_valid        =       state_data ? s1_axis_fromhost_tvalid  : dma1_fromhost_valid_temp;    
+  assign   dma1_fromhost_ctrl         =       down_last_be ? (dma1_fromhost_ctrl_end) : (dma1_fromhost_ctrl_temp);    
+  assign   s1_axis_fromhost_tready    =       state_data ? dma1_fromhost_accept  : 1'b0; 
 
+  assign   dma1_fromhost_ctrl_end     =       (s1_axis_fromhost_tkeep <=8'b00001111) ? 8'b00010100 : 8'b00011100;
+  /*  Upstream Channel */
+  assign   m0_axis_tohost_tdata       =       req_data_switch ? dma0_tohost_data      : dma0_tohost_data_temp;
+  assign   m0_axis_tohost_tvalid      =       req_data_switch ? dma0_tohost_valid     : dma0_tohost_valid_temp;
+  assign   dma0_tohost_almost_full    =       req_data_switch ? (~m0_axis_tohost_tready) : 1'b0; 
       
-      wire channel_if_add_data;
-      assign channel_if_add_data = 1'b0;
-      
-                        
-  // -----------------------------------------------------------------------------
-//**********************************************************
-//Signal Declation
-//**********************************************************
-  localparam DOWN_IDLE = 3'd0;
-  localparam DOWN_ACK_1 = 3'd1;
-  localparam DOWN_ACK_2 = 3'd2;
-  localparam DOWN_DATA = 3'd3;
-  
-  localparam UP_IDLE = 3'd0;
-  localparam UP_DATA = 3'd1;
-  localparam UP_REQ2 = 3'd2;
-  localparam UP_ACK_1 = 3'd3;
-  localparam UP_ACK_2 = 3'd4;
-  localparam UP_DATA_END = 3'd5;
-  
-  localparam S_UPSTREAM = 3'd0;
-  localparam S_DOWNSREAM = 3'd1;
-  
-  reg [3:0]  tag_num;
-  reg [15:0] cnt_tohost_data;
-  reg [15:0] length_transfer_words;
-  
-  
-  reg [3:0] down_state;
-  
-  reg[3:0] up_state;
-  
-  wire  fifo_full;
-  reg [63:0] fifo_din;
-  reg   fifo_wr_en;
-  
-  wire  fifo_empty;
-  wire [63:0] fifo_dout;
-  reg   fifo_rd_en;
-  
-  wire [5:0] write_count;
-  wire [5:0] read_count;
-  
-  
-  reg  [63:0] current_req;
-  wire  [15:0] current_length_int;
-  
-  
-  reg  [31:0] current_length;
-  reg  [2:0]  down_dst_addr;
-  reg  [2:0]  up_src_addr;
-  
-
-  
-  
+  /***********************************************************
+  * Use a fifo to story the Req signal from DiniDMA 
+  ***********************************************************/
   fifo_generator_0 fifo_generator_0_i(
   .wr_clk(clk),
   .rd_clk(clk),
@@ -221,11 +180,13 @@ module dma_interface(
   .wr_data_count(write_count)
   );
  
+  /***********************************************************
+  * Main Logic 
+  ***********************************************************/
   always@(posedge clk,negedge rst_n)
   begin 
    if(!rst_n)
    begin
-    //s1_axis_fromhost_tready  <= 1'b0;
     dma1_tohost_almost_full      <= 1'b0;
     dma1_fromhost_ctrl_temp     <= 8'b0;
     cnt_tohost_data             <= 16'd0;
@@ -234,11 +195,11 @@ module dma_interface(
     down_state                  <= DOWN_IDLE;
     down_dst_addr               <= 3'b0;
     
-    state_data                  <= 1'b0;  //--edit
+    state_data                  <= 1'b0;  
    end
    else
    begin
-    //If the Req is the first Req word,so save the Req information to fifo.
+    /* If the Req is the first Req word,so save the Req information to fifo */
     if(dma1_tohost_ctrl[4] & ~dma1_tohost_ctrl[3] & dma1_tohost_valid)
     begin 
      if(!fifo_full)
@@ -246,7 +207,7 @@ module dma_interface(
       
       fifo_wr_en                <= 1'b1;
       fifo_din                  <= dma1_tohost_data;
-      dma1_tohost_almost_full    <= 1'b0;
+      dma1_tohost_almost_full   <= 1'b0;
       
      end
      
@@ -254,29 +215,26 @@ module dma_interface(
       begin
       
        fifo_wr_en               <= 1'b0;
-       dma1_tohost_almost_full   <= 1'b1;
+       dma1_tohost_almost_full  <= 1'b1;
       
       end
     end
     else
      fifo_wr_en   <= 1'b0;
-    
-     
      
     case(down_state)
-    //If the fifo not empty,read the req from it
+    /* If the fifo not empty,read the req from it */
     DOWN_IDLE:begin
     
      cnt_tohost_data        <= 0;  
-     // --edit       
      dma1_fromhost_data_temp[63:0]  <= 64'b1;
-     dma1_fromhost_valid_temp       <= 1'b0;   //downstream stop
+     dma1_fromhost_valid_temp       <= 1'b0;   
      dma1_fromhost_ctrl_temp        <=8'b0;
      
      if(!fifo_empty)
      begin
      
-      fifo_rd_en                 <= 1'b1;     //read the first req
+      fifo_rd_en                 <= 1'b1;     
       current_req                <= fifo_dout;
       down_state                 <= DOWN_ACK_1;
       
@@ -291,9 +249,9 @@ module dma_interface(
        down_state    <= DOWN_IDLE;
        fifo_rd_en    <= 1'b0;
        
-      end
+     end
     end
-    //Return Ack to DMA InterFace
+    /* Return Ack to DMA InterFace */
     DOWN_ACK_1:
     begin
      fifo_rd_en   <= 1'b0;
@@ -301,12 +259,12 @@ module dma_interface(
      if(dma1_fromhost_accept && dma1_fromhost_valid_temp)
      begin
      
-      dma1_fromhost_valid_temp   <= 1'b1;
+      dma1_fromhost_valid_temp    <= 1'b1;
       
-      dma1_fromhost_ctrl_temp[0]  <= 1'b1;   //thit is first ack
-      dma1_fromhost_ctrl_temp[2]  <= 1'b0;   //data valid
-      dma1_fromhost_ctrl_temp[3]  <= 1'b0;   //data valid
-      dma1_fromhost_ctrl_temp[4]  <= 1'b0;   //this is down stream ack
+      dma1_fromhost_ctrl_temp[0]  <= 1'b1;              //thit is first ack
+      dma1_fromhost_ctrl_temp[2]  <= 1'b0;              //data valid
+      dma1_fromhost_ctrl_temp[3]  <= 1'b0;              //data valid
+      dma1_fromhost_ctrl_temp[4]  <= 1'b0;              //this is down stream ack
       dma1_fromhost_ctrl_temp[5]  <= 1'b0;  
       
       dma1_fromhost_data_temp[7:4]  <= tag_num;
@@ -330,10 +288,10 @@ module dma_interface(
       dma1_fromhost_data_temp[15:0]     <= length_transfer_words;
       dma1_fromhost_data_temp[23:16]    <= 8'd0;
       
-      dma1_fromhost_ctrl_temp[0]   <= 1'b0;   //thit is second ack
-      dma1_fromhost_ctrl_temp[2]   <= 1'b0;   //data valid
-      dma1_fromhost_ctrl_temp[3]   <= 1'b0;   //data valid
-      dma1_fromhost_ctrl_temp[4]   <= 1'b0;   //this is down stream ack
+      dma1_fromhost_ctrl_temp[0]   <= 1'b0;             //thit is second ack
+      dma1_fromhost_ctrl_temp[2]   <= 1'b0;             //data valid
+      dma1_fromhost_ctrl_temp[3]   <= 1'b0;             //data valid
+      dma1_fromhost_ctrl_temp[4]   <= 1'b0;             //this is down stream ack
       dma1_fromhost_ctrl_temp[5]   <= 1'b1;        
                     
       down_state      <= DOWN_DATA;
@@ -348,18 +306,17 @@ module dma_interface(
       end
     end
     
-    //When finish Ack,ready to transfer data
+    /* When finish Ack,ready to transfer data */
     DOWN_DATA:
     begin
         state_data      <=  1'b1;
-          //If Dinidma is ready to get data
      if(dma1_fromhost_accept )
      begin
             
-        dma1_fromhost_ctrl_temp[0]  <= 1'b0;   //thit is data
-        dma1_fromhost_ctrl_temp[2]  <= 1'b1;   //lower data valid
-        dma1_fromhost_ctrl_temp[3]  <= 1'b1;   //upper data invalid   --
-        dma1_fromhost_ctrl_temp[4]  <= 1'b0;   //this is down stream ack
+        dma1_fromhost_ctrl_temp[0]  <= 1'b0;            //thit is data
+        dma1_fromhost_ctrl_temp[2]  <= 1'b1;            //lower data valid
+        dma1_fromhost_ctrl_temp[3]  <= 1'b1;            //upper data invalid   --
+        dma1_fromhost_ctrl_temp[4]  <= 1'b0;            //this is down stream ack
         dma1_fromhost_ctrl_temp[5]  <= 1'b0;   
             
       if((s1_axis_fromhost_tvalid == 1'b1)&&(s1_axis_fromhost_tready == 1'b1))
@@ -379,11 +336,11 @@ module dma_interface(
      if( (s1_axis_fromhost_tlast == 1'b1) && (s1_axis_fromhost_tready == 1'b1))
      begin
      
-        cnt_tohost_data     <= 16'd0;      
-        down_state     <= DOWN_IDLE;            
-        state_data     <= 1'b0;   
-        dma1_fromhost_valid_temp       <= 1'b0;   //downstream stop
-        dma1_fromhost_ctrl_temp        <=8'b0;
+        cnt_tohost_data                 <=  16'd0;      
+        down_state                      <=  DOWN_IDLE;            
+        state_data                      <=  1'b0;   
+        dma1_fromhost_valid_temp        <=  1'b0;                 //downstream stop
+        dma1_fromhost_ctrl_temp         <=  8'b0;
            
      end 
 
@@ -393,14 +350,16 @@ module dma_interface(
   end
  end
  
-assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_DATA);
- //   --      Upstream process      --    //
- always@(posedge clk or negedge rst_n)
- begin
+  assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_DATA);
+  /***********************************************************
+  * Upstream Channel Transfer
+  ***********************************************************/
+  always@(posedge clk or negedge rst_n)
+  begin
   if(!rst_n)
   begin
      
-   dma0_fromhost_ctrl           <= 8'b0;                 //to dinidma  
+   dma0_fromhost_ctrl           <= 8'b0;                          //to dinidma  
    dma0_fromhost_data           <= 64'b0;  
    dma0_fromhost_valid          <= 1'b0;
    
@@ -408,7 +367,7 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
    dma0_tohost_valid_temp       <= 1'b0;
                               
    up_state                     <= UP_IDLE;
-   req_data_switch              <= 1'b0;                // use temp
+   req_data_switch              <= 1'b0;                          // use temp
    
    up_src_addr                  <= 3'b0;
   
@@ -420,13 +379,13 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
 
     dma0_fromhost_valid             <= 1'b0;         
     
-    // if req come,save the information and jump to req2
+    /* if req come,save the information and jump to req2 */
     if(dma0_tohost_ctrl[4] & ~dma0_tohost_ctrl[3] & dma0_tohost_valid & m0_axis_tohost_tready)      
     begin
     
       up_state                      <= UP_REQ2;      
       up_tag_num                    <= dma0_tohost_data[63:32];       //save tag number
-      up_data_length[15:0]          <= dma0_tohost_data[15:0];      //save data length
+      up_data_length[15:0]          <= dma0_tohost_data[15:0];        //save data length
       up_src_addr                   <= dma0_tohost_data[29:27];
       
     end
@@ -436,7 +395,7 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
       
    end
    
-   //REQ2 is the host information ,no use
+   /* REQ2 is the host information ,no use */
     UP_REQ2:
      begin
         if(dma0_tohost_ctrl[4] & ~dma0_tohost_ctrl[3] & dma0_tohost_valid & m0_axis_tohost_tready)
@@ -444,7 +403,7 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
         
             up_state                <= UP_DATA;            
             req_data_switch         <= 1'b1;
-            
+            bytes_transfer          <= dma0_tohost_data[63:48];
         end
         else
         
@@ -460,7 +419,7 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
         begin
         
           up_state                <= UP_ACK_1;
-          req_data_switch         <= 1'b0;                      //switch    
+          req_data_switch         <= 1'b0;                              //switch    
                       
         end
         else
@@ -476,11 +435,11 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
      begin            
             dma0_fromhost_valid     <= 1'b1;
             
-            dma0_fromhost_ctrl[0]   <= 1'b1;                     //first ack
-            dma0_fromhost_ctrl[4]   <= 1'b1;                     //
-            dma0_fromhost_ctrl[5]   <= 1'b0;                     //second ack
+            dma0_fromhost_ctrl[0]   <= 1'b1;                            //first ack
+            dma0_fromhost_ctrl[4]   <= 1'b1;                            //
+            dma0_fromhost_ctrl[5]   <= 1'b0;                            //second ack
             
-            dma0_fromhost_data[7:4] <= up_tag_num[7:4];         //send tag number 
+            dma0_fromhost_data[7:4] <= up_tag_num[7:4];                 //send tag number 
             
             up_state                         <= UP_ACK_2;
 
@@ -491,23 +450,67 @@ assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_D
       begin
              dma0_fromhost_valid     <= 1'b1;
              
-             dma0_fromhost_ctrl[0]  <= 1'b0;                     //first ack
-             dma0_fromhost_ctrl[4]  <= 1'b1;                     //
-             dma0_fromhost_ctrl[5]  <= 1'b1;                     //second ack
+             dma0_fromhost_ctrl[0]  <= 1'b0;                            //first ack
+             dma0_fromhost_ctrl[4]  <= 1'b1;                            //
+             dma0_fromhost_ctrl[5]  <= 1'b1;                            //second ack
              
-             dma0_fromhost_data[23:0] <= up_data_length;         //send data length
-             
+             dma0_fromhost_data[23:0] <= up_data_length[15:0];          //send data length
              up_state                         <= UP_IDLE;
 
-      end
+           end
 
    default: up_state     <= UP_IDLE;
   endcase
  end
  
+always @(*)begin
+    if(dma0_tohost_ctrl[3])
+    begin
+        case(bytes_transfer[2:0]):
+            3'b000:m0_axis_tohost_tkeep = 8'b1111_1111;
+            3'b001:m0_axis_tohost_tkeep = 8'b0000_0001;
+            3'b010:m0_axis_tohost_tkeep = 8'b0000_0011;
+            3'b011:m0_axis_tohost_tkeep = 8'b0000_0111;
 
- 
- 
+            3'b100:m0_axis_tohost_tkeep = 8'b0000_1111;
+            3'b101:m0_axis_tohost_tkeep = 8'b0001_1111;
+            3'b110:m0_axis_tohost_tkeep = 8'b0011_1111;
+            3'b111:m0_axis_tohost_tkeep = 8'b0111_1111;
+            default: m0_axis_tohost_tkeep = 8'b1111_1111;
+          endcase
+        end
+    else
+        m0_axis_tohost_tkeep = 8'b1111_1111;
+end
 
+  /***********************************************************
+  * For Simulate,Change the FSM code to ASCII
+  ***********************************************************/
+`ifdef simu_on
+  reg [15*8:0] down_state_str;
+  reg [15*8:0] up_state_str;   
+
+always @(*)begin
+  case(down_state)
+        DOWN_IDLE   :   down_state_str  = {"IDLE"};
+        DOWN_ACK_1  :   down_state_str  = {"DOWN_ACK_1"};
+        DOWN_ACK_2  :   down_state_str  = {"DOWN_ACK_2"};
+        DOWN_DATA   :   down_state_str  = {"DOWN_DATA"};
+        default     :   down_state_str  = {"xxx"};
+  endcase
+end
+
+always @(*)begin
+  case(up_state)
+        UP_IDLE     :   up_state_str    = {"UP_IDLE"};
+        UP_REQ2     :   up_state_str    = {"UP_REQ2"};
+        UP_ACK_1    :   up_state_str    = {"UP_ACK_1"};
+        UP_ACK_2    :   up_state_str    = {"UP_ACK_2"};
+        UP_DATA     :   up_state_str    = {"UP_DATA"};
+        UP_DATA_END :   up_state_str    = {"UP_DATA_END"};
+        default     :   up_state_str    = {"xxx"};
+  endcase
+end
+`endif
 endmodule
 
