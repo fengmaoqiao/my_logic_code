@@ -79,11 +79,15 @@ module phy_top(
     output	 wire refclk_req,
     output	 wire clk32_select_out,
 
-//  -- RF9361 IPcore Interface
+  
+  /***********************************************************
+  * AD9361 INTERFACE 
+  ***********************************************************/
     output   wire [15:0] modem_tx_a_i_rf,    //out to rf
     output   wire [15:0] modem_tx_a_q_rf,    //out to rf
     input    wire [15:0] modem_rx_a_i_rf,    //in from rf
     input    wire [15:0] modem_rx_a_q_rf,    //in from rf
+
     output                  dac_dovf,
     output                  dac_dunf,
     output                  adc_dovf,
@@ -100,64 +104,65 @@ module phy_top(
     output                  txfifo_empty,
     output                  rxfifo_full,  
 
-//--------------apb slaver interface---------------------
     
-    input	 wire [15:0] s_apb_paddr,
-    input	 wire        s_apb_penable,
-    input	 wire [2:0]  s_apb_pprot,
+  /***********************************************************
+  * AHB_TO_APB BUS convert signal 
+  ***********************************************************/
+    input	    wire [15:0] s_apb_paddr,
+    input	    wire        s_apb_penable,
+    input	    wire [2:0]  s_apb_pprot,
+    input	    wire [31:0] s_apb_pwdata, 
+    
+    input 	  wire   	    psel_modema, 
+    input     wire        psel_modemg,
+    input     wire        psel_radio,
+    input     wire        psel_frontend,
+    input     wire        psel_macphy_if,
+    input     wire        psel_macphy_rf,
 
-    input	 wire [31:0] s_apb_pwdata, 
-    
-    output	 wire [31:0] s_apb_prdata_if,
-    output   wire [31:0] s_apb_prdata_rf,
-    output	 wire [31:0] s_apb_prdata_modema,
-    output	 wire [31:0] s_apb_prdata_modemg,
-    output	 wire [31:0] s_apb_prdata_radio,
-    output	 wire [31:0] s_apb_prdata_frontend,    
-    output	 wire 		 s_apb_pready_if,
-    
-    output	 wire 		 s_apb_pready_modema,
-    
-    input	wire   	    psel_modema, 
-    input   wire        psel_modemg,
-    input   wire        psel_radio,
-    input   wire        psel_frontend,
-    input   wire        psel_macphy_if,
-    input   wire        psel_macphy_rf,
-    		 
-    output	 wire [1:0]  s_apb_pslverr,	
-    input	 wire [3:0]  s_apb_pstrb,
-    input	 wire        s_apb_pwrite,
-    
-    output               txv_immstop,
+    input	    wire [3:0]  s_apb_pstrb,
+    input	    wire        s_apb_pwrite,
+    /* output */
+    output	  wire [31:0] s_apb_prdata_if,
+    output    wire [31:0] s_apb_prdata_rf,
+    output	  wire [31:0] s_apb_prdata_modema,
+    output	  wire [31:0] s_apb_prdata_modemg,
+    output	  wire [31:0] s_apb_prdata_radio,
+    output	  wire [31:0] s_apb_prdata_frontend,    
+    output	  wire 		    s_apb_pready_if,
+    output	  wire 		    s_apb_pready_modema,
+    output	  wire [1:0]  s_apb_pslverr,	
+    output                txv_immstop,
 //--------------------- phy interface ------------------
-    input   wire        testmode        ,
-    output	 wire 		 phy_cca_ind_medium ,                    
-    output	 wire 		 phyRdy          ,
-    input 	 wire 		 keepRFOn        ,
-    output  wire 		 CCAPrimary20    ,          //edit by fengmaoqiao input 2 output
+    input    wire         testmode        ,
+    input 	 wire 		    keepRFOn        ,
+    output	 wire 		    phy_cca_ind_medium ,                    
+    output	 wire 		    phyRdy          ,
+    output   wire 		    CCAPrimary20    ,          //edit by fengmaoqiao input 2 output
 //------------------ tx ----------------
-    input 	 wire 		 txReq           ,
-    input 	 wire [7:0]  txData          ,
-    input 	 wire 		 macDataValid    ,
-    output	 wire 		 txEnd_p         ,
-    input	 wire 		 mpIfTxFifoEmtpy ,
+    input 	 wire 		    txReq           ,
+    input 	 wire [7:0]   txData          ,
+    input 	 wire 		    macDataValid    ,
+    input	   wire 		    mpIfTxFifoEmtpy ,
+    output	 wire 		    txEnd_p         ,
 //-----------------  rx  --------------
-    input 	 wire 		 rxReq           ,
-    output	 wire [7:0]  rxData          ,
-    output	 wire 		 rxEndForTiming_p,
-    output	 wire 		 rxEnd_p         ,
-                             output  wire [11:0] rxv_length      ,
+    input 	 wire 		    rxReq           ,
+    input         [11:0]  tx_data_out,
+    input         [11:0]  rx_data_in,
 
-    input    [11:0]         tx_data_out,
-    input    [11:0]         rx_data_in,
+    output	 wire [7:0]   rxData          ,
+    output	 wire 		    rxEndForTiming_p,
+    output	 wire 		    rxEnd_p         ,
+    output   wire [11:0]  rxv_length      ,
     
-    output                  agc_fall
+    output                agc_fall
 
     );
  
     
- //=====================================================================
+  /***********************************************************
+  * Signal Declaration 
+  ***********************************************************/
     wire                    modem_rx_a_tog;
     wire    [10:0]          modem_rx_a_i_phy     ;
     wire    [10:0]          modem_rx_a_q_phy     ;
@@ -233,6 +238,9 @@ module phy_top(
    
     
     
+  /***********************************************************
+  * PHY INSTANCE
+  ***********************************************************/
     rw_wlanbb_11g_maxim
      #(
       .num_queues_g           (4 ),
@@ -282,10 +290,8 @@ module phy_top(
     .prdata_streamproc     (),
     .prdata_frontend       (s_apb_prdata_frontend  ), 
 
-  //    -- rf interface map
     .anaif_rxi             (anaif_rxi  ),
     .anaif_rxq             (anaif_rxq  ),
-//    -- TX                                        
     .anaif_txi             (anaif_txi  ),         
     .anaif_txq             (anaif_txq  ),  
         
@@ -330,6 +336,9 @@ module phy_top(
   ); 
 
 
+  /***********************************************************
+  * tx_rx_fifo between the PHY and AD9361
+  ***********************************************************/
     tx_rx_fifo u_tx_rx_fifo(
     
     .clk_80m                     ( clk_80m                    ),
@@ -340,19 +349,27 @@ module phy_top(
     
     .sourcedata_ch               ( sourcedata_ch              ),
     .cap_data_en                 ( cap_data_en                ),
-
+    
+    /* phy if from phy*/
     .modem_tx_a_tog              ( modem_tx_a_tog             ),
-    .modem_tx_a_i_phy            ( modem_tx_a_i_phy           ),   //in
-    .modem_tx_a_q_phy            ( modem_tx_a_q_phy           ),   //in
+    .modem_tx_a_i_phy            ( modem_tx_a_i_phy           ),   //in from phy
+    .modem_tx_a_q_phy            ( modem_tx_a_q_phy           ),   //in from phy
+    /* analog if */
     .modem_tx_a_i_rf_o           ( modem_tx_a_i_rf            ),   //out to RF
     .modem_tx_a_q_rf_o           ( modem_tx_a_q_rf            ),   //out to RF
-      
-    .modem_rx_a_tog              ( modem_rx_a_tog             ),
+     
+    /* analog if*/ 
     .modem_rx_a_i_rf_in          ( modem_rx_a_i_rf            ),     // in from rf
     .modem_rx_a_q_rf_in          ( modem_rx_a_q_rf            ),     // in from rf          
+
+    /* phy if to phy*/ 
+    .modem_rx_a_tog              ( modem_rx_a_tog             ),
     .modem_rx_a_i_phy            ( modem_rx_a_i_phy           ),     // out to phy
     .modem_rx_a_q_phy            ( modem_rx_a_q_phy           ),     // out to phy
-    
+   
+
+    /* the CTL INTERFACE between phy and AD9361 */
+
     .dac_dovf                    (dac_dovf                    ),
     .dac_dunf                    (dac_dunf                    ),
     .adc_dovf                    (adc_dovf                    ),
@@ -374,6 +391,9 @@ module phy_top(
     .rx_start                    (rx_start                    )
     );
   
+  /***********************************************************
+  * MACPHY_IF include rx_mod and tx_mod and regbank
+  ***********************************************************/
   macphy_if u_macphy_if(
     
         .clk_80m              ( clk_80m                    ), 
@@ -439,27 +459,6 @@ module phy_top(
         .rx_data_in            ( rx_data_in                ),
         .cp2_detected          ( cp2_detected              )  //in         
     );
-    reg [15:0] reg_top_limit;
-    reg [15:0] reg_lower_limit;
-    
-    always@ *
-    begin
-        if(s_apb_penable & s_apb_pwrite & psel_frontend)
-        begin
-            case(s_apb_paddr)
-            16'ha001:begin
-                        reg_top_limit   = s_apb_pwdata[31:16];
-                        reg_lower_limit = s_apb_pwdata[15 :0];
-                     end
-            default: begin
-                        reg_top_limit   = 16'd0;
-                        reg_lower_limit = 16'd0;        
-                     end
-            endcase
-        end
-        else
-        ;
-    end
     
     cca_detect  cca_detect_1
     (
@@ -468,10 +467,14 @@ module phy_top(
         .reset_n                ( external_resetn                   ),
         .en_20m_i               ( AD9361_clk                        ),
         .agc_inbd_pow_en        ( 1'b1                              ),    
-        //.modem_rx_a_i_rf        ( {4'b0,modem_rx_a_i_phy,1'b0}      ),
-        //.modem_rx_a_q_rf        ( {4'b0,modem_rx_a_q_phy,1'b0}      ),
+
+        `ifdef FMQ_SIMULATE 
+        .modem_rx_a_i_rf        ( {4'b0,modem_rx_a_i_phy,1'b0}      ),
+        .modem_rx_a_q_rf        ( {4'b0,modem_rx_a_q_phy,1'b0}      ),
+        `elsif
         .modem_rx_a_i_rf        ( modem_rx_a_i_rf                   ),
         .modem_rx_a_q_rf        ( modem_rx_a_q_rf                   ),
+        `endif
         .reg_top_limit          ( reg_top_limit                     ),
         .reg_lower_limit        ( reg_lower_limit                   ),
         /* output */

@@ -152,11 +152,6 @@ module dma_interface(
   ***********************************************************/
   /*  Downstream Channel  */
   assign   down_last_be               =       s1_axis_fromhost_tlast & s1_axis_fromhost_tready & s1_axis_fromhost_tvalid;
-  assign   dma1_fromhost_data         =       state_data ? s1_axis_fromhost_tdata   : dma1_fromhost_data_temp;
-  assign   dma1_fromhost_valid        =       state_data ? s1_axis_fromhost_tvalid  : dma1_fromhost_valid_temp;    
-  assign   dma1_fromhost_ctrl         =       down_last_be ? (dma1_fromhost_ctrl_end) : (dma1_fromhost_ctrl_temp);    
-  assign   s1_axis_fromhost_tready    =       state_data ? dma1_fromhost_accept  : 1'b0; 
-
   assign   dma1_fromhost_ctrl_end     =       (s1_axis_fromhost_tkeep <=8'b00001111) ? 8'b00010100 : 8'b00011100;
   /*  Upstream Channel */
   assign   m0_axis_tohost_tdata       =       req_data_switch ? dma0_tohost_data      : dma0_tohost_data_temp;
@@ -183,173 +178,141 @@ module dma_interface(
   /***********************************************************
   * Main Logic 
   ***********************************************************/
-  always@(posedge clk,negedge rst_n)
-  begin 
-   if(!rst_n)
-   begin
-    dma1_tohost_almost_full      <= 1'b0;
-    dma1_fromhost_ctrl_temp     <= 8'b0;
-    cnt_tohost_data             <= 16'd0;
-    length_transfer_words       <= 16'd0;
-    fifo_wr_en                  <= 1'b0;
-    down_state                  <= DOWN_IDLE;
-    down_dst_addr               <= 3'b0;
+  always @(posedge clk or negedge rst_n)begin
+  if(!rst_n)
+      current_state <= IDLE;
+    end
+    else begin
+      current_state <= next_state;
+    end
+  end
+
+
+  always @(*)begin
+    case(current_state)
+      IDLE:
+        if(!fifo_empty)
+          next_state = DOWN_ACK_1;
+        else
+          next_state = IDLE;
     
-    state_data                  <= 1'b0;  
-   end
-   else
-   begin
-    /* If the Req is the first Req word,so save the Req information to fifo */
-    if(dma1_tohost_ctrl[4] & ~dma1_tohost_ctrl[3] & dma1_tohost_valid)
-    begin 
-     if(!fifo_full)
-     begin
-      
-      fifo_wr_en                <= 1'b1;
-      fifo_din                  <= dma1_tohost_data;
-      dma1_tohost_almost_full   <= 1'b0;
-      
-     end
-     
-     else
-      begin
-      
-       fifo_wr_en               <= 1'b0;
-       dma1_tohost_almost_full  <= 1'b1;
-      
-     end
+      DOWN_ACK_1:
+        if(dma1_fromhost_accept && dma1_fromhost_valid_temp)
+          next_state = DOWN_ACK_2;
+        else
+          next_state = DOWN_ACK_1;
+
+      DOWN_ACK_2:
+        if(dma1_fromhost_accept)
+          next_state = DOWN_DATA;
+        else
+          next_state = DOWN_ACK_2;
+
+      DOWN_DATA:
+        if(s1_axis_fromhost_tlast == 1'b1 && s1_axis_fromhost_tready == 1'b1)
+          next_state = DOWN_IDLE;
+        else
+          ;
+      default : next_state=IDLE;
+        end
+    endcase
+  end
+
+  localparam  WD_TIME_OVER 30000
+  reg [31:0]  wd_timer;
+  reg         time_out;    
+  always @(posedge clk or negedge rst_n)
+  begin
+    if(!rst_n)begin
+      wd_timer <= 32'd0;
+      time_out <= 1'b0;
     end
     else
-     fifo_wr_en   <= 1'b0;
-     
-    case(down_state)
-    /* If the fifo not empty,read the req from it */
-    DOWN_IDLE:begin
-    
-     cnt_tohost_data        <= 0;  
-     dma1_fromhost_data_temp[63:0]  <= 64'b1;
-     dma1_fromhost_valid_temp       <= 1'b0;   
-     dma1_fromhost_ctrl_temp        <=8'b0;
-     
-     if(!fifo_empty)
-     begin
-     
-      fifo_rd_en                 <= 1'b1;     
-      current_req                <= fifo_dout;
-      down_state                 <= DOWN_ACK_1;
-      
-      tag_num                    <= fifo_dout[39:36];
-      length_transfer_words      <= fifo_dout[15:0]; 
-      down_dst_addr              <= fifo_dout[29:27];
-                       
-     end
-     else
+      if(wd_timer == WD_TIME_OVER)
       begin
-      
-       down_state    <= DOWN_IDLE;
-       fifo_rd_en    <= 1'b0;
-       
-     end
-    end
-    /* Return Ack to DMA InterFace */
-    DOWN_ACK_1:
-    begin
-     fifo_rd_en   <= 1'b0;
-     
-     if(dma1_fromhost_accept && dma1_fromhost_valid_temp)
-     begin
-     
-      dma1_fromhost_valid_temp    <= 1'b1;
-      
-      dma1_fromhost_ctrl_temp[0]  <= 1'b1;              //thit is first ack
-      dma1_fromhost_ctrl_temp[2]  <= 1'b0;              //data valid
-      dma1_fromhost_ctrl_temp[3]  <= 1'b0;              //data valid
-      dma1_fromhost_ctrl_temp[4]  <= 1'b0;              //this is down stream ack
-      dma1_fromhost_ctrl_temp[5]  <= 1'b0;  
-      
-      dma1_fromhost_data_temp[7:4]  <= tag_num;
-      down_state                    <= DOWN_ACK_2;
-      
-     end
-     else begin
-     
-      dma1_fromhost_valid_temp      <= 1'b1;
-      down_state                    <= DOWN_ACK_1;
-      
+         wd_timer <= 32'b0;
+         time_out <= 1'b1;
       end
+      else
+         wd_timer <= wd_timer + 1;
     end
-    
-    DOWN_ACK_2:
-    begin
-     if(dma1_fromhost_accept)
-     begin
-     
-      dma1_fromhost_valid_temp          <= 1'b1;
-      dma1_fromhost_data_temp[15:0]     <= length_transfer_words;
-      dma1_fromhost_data_temp[23:16]    <= 8'd0;
-      
-      dma1_fromhost_ctrl_temp[0]   <= 1'b0;             //thit is second ack
-      dma1_fromhost_ctrl_temp[2]   <= 1'b0;             //data valid
-      dma1_fromhost_ctrl_temp[3]   <= 1'b0;             //data valid
-      dma1_fromhost_ctrl_temp[4]   <= 1'b0;             //this is down stream ack
-      dma1_fromhost_ctrl_temp[5]   <= 1'b1;        
-                    
-      down_state      <= DOWN_DATA;
-            
-     end
-     else 
-      begin
-      
-      dma1_fromhost_valid_temp      <= 1'b1;
-      down_state                    <= DOWN_ACK_2;
-      
-      end
-    end
-    
-    /* When finish Ack,ready to transfer data */
-    DOWN_DATA:
-    begin
-        state_data      <=  1'b1;
-     if(dma1_fromhost_accept )
-     begin
-            
-        dma1_fromhost_ctrl_temp[0]  <= 1'b0;            //thit is data
-        dma1_fromhost_ctrl_temp[2]  <= 1'b1;            //lower data valid
-        dma1_fromhost_ctrl_temp[3]  <= 1'b1;            //upper data invalid   --
-        dma1_fromhost_ctrl_temp[4]  <= 1'b0;            //this is down stream ack
-        dma1_fromhost_ctrl_temp[5]  <= 1'b0;   
-            
-      if((s1_axis_fromhost_tvalid == 1'b1)&&(s1_axis_fromhost_tready == 1'b1))
-      begin
-      
-        cnt_tohost_data   <= cnt_tohost_data + 1;
-             
-      end
-     end
-     else
-     begin
-                 
-        down_state     <= DOWN_DATA;
-      
-     end
-     
-     if( (s1_axis_fromhost_tlast == 1'b1) && (s1_axis_fromhost_tready == 1'b1))
-     begin
-     
-        cnt_tohost_data                 <=  16'd0;      
-        down_state                      <=  DOWN_IDLE;            
-        state_data                      <=  1'b0;   
-        dma1_fromhost_valid_temp        <=  1'b0;                 //downstream stop
-        dma1_fromhost_ctrl_temp         <=  8'b0;
-           
-     end 
-
-                   
-    end
-   endcase
   end
- end
- 
+
+
+
+
+  always @(*)
+  begin
+    case(current_state):
+      DOWN_IDLE:begin
+        /* Initial */
+        cnt_tohost_data                 = 0;
+        dma1_fromhost_data_temp         = 64'b1;
+
+        dma1_fromhost_valid_temp        = 1'b0;
+        dma1_fromhost_ctrl_temp         = 8'b0;
+
+        state_data                      = 1'b0;
+
+        /* Get the REQ from fifo */
+        if(~fifo_empty)
+        begin
+
+          fifo_rd_en                    = 1'b1;
+          current_req                   = fifo_dout;
+          tag_num                       = fifo_dout[39:36];
+          length_transfer_words         = fifo_dout[15:0];
+          down_dst_addr                 = fifo_dout[29:27];
+        end
+      end
+      /* Return the first ACK to Dinidma */
+      DOWN_ACK_1:begin
+        dma1_fromhost_valid_temp        = 1'b1;
+
+        dma1_fromhost_ctrl_temp[0]      = 1'b1;
+        dma1_fromhost_ctrl_temp[2]      = 1'b0;
+        dma1_fromhost_ctrl_temp[3]      = 1'b0;
+        dma1_fromhost_ctrl_temp[4]      = 1'b0;
+        dma1_fromhost_ctrl_temp[5]      = 1'b0;
+
+        dma1_fromhost_ctrl_temp[7:4]    = tag_num;
+      end
+      /* Return the second ACK to Dinidma */
+      DOWN_ACK_2:begin
+        dma1_fromhost_valid_temp        = 1'b1;
+        dma1_fromhost_data_temp[15:0]   = length_transfer_words;
+        dma1_fromhost_data_temp[23:16]  = 8'd0;
+
+        dma1_fromhost_ctrl_temp[0]      = 1'b0;
+        dma1_fromhost_ctrl_temp[2]      = 1'b0;
+        dma1_fromhost_ctrl_temp[3]      = 1'b0;
+        dma1_fromhost_ctrl_temp[4]      = 1'b0;
+        dma1_fromhost_ctrl_temp[5]      = 1'b1;
+      end
+      
+      /* Trans the DATA to Dinidma */
+      DOWN_DATA:begin
+        state_data                      = 1'b1;
+
+        dma1_fromhost_ctrl_temp[0]      = 1'b0;
+        dma1_fromhost_ctrl_temp[2]      = 1'b1;
+        dma1_fromhost_ctrl_temp[3]      = 1'b1;
+        dma1_fromhost_ctrl_temp[4]      = 1'b0;
+        dma1_fromhost_ctrl_temp[5]      = 1'b0;
+
+        dma1_fromhost_data              = s1_axis_fromhost_tdata;
+        dma1_fromhost_tvalid            = s1_axis_fromhost_tvalid;
+
+        s1_axis_fromhost_tready         = dma1_fromhost_accept;
+
+        if(down_last_be)
+          dma1_fromhost_ctrl = dma1_fromhost_ctrl_end;
+        else
+          dma1_fromhost_ctrl = dma1_fromhost_ctrl_temp;
+
+      end
+  end
+
   assign m0_axis_tohost_tlast = (dma0_tohost_ctrl[3] == 1'b1) && (up_state == UP_DATA);
   /***********************************************************
   * Upstream Channel Transfer

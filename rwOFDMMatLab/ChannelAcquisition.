@@ -1,0 +1,44 @@
+function LongPreAverage = ChannelAcquisition(Data,Sym)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   This source code is (C) by RivieraWaves, any copy is strictly forbidden unless 
+%     explicitly authorized by a written document originating from RivieraWaves.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Process the long preamble, the guard interval has already been removed 
+% This will be called twice, once for each long preamble symbol
+%
+% Inputs:  Data             - 3.2 us of data, corresponding to first or second symbols of long preamble
+%                           complex vector 64x1
+%          Sym              - (1,2) indicates whether data is first or second symbol of long preamble
+% Returns: LongPreAverage   - average of symbols T1 and T2 in the frequency domain, if called with sym==2 
+%                             (all zeros if sym==1); complex vector 53x1
+%
+% Note that the data is not removed from the averaged estimate - this is done in function wiener
+
+persistent FirstCall;
+
+if (Sym == 1)           % first symbol of long preamble
+    FirstCall = Data;   % store the first symbol
+    LongPreAverage = zeros(53,1);
+elseif (Sym == 2)       % average T1 and T2
+    IntegratedTD = floor((FirstCall + Data)/2 + 0.5*(1+j));
+
+PatternBin('Files/TimeDomain','outTimeDomain',IntegratedTD,11,0,[0 1]);
+        
+    % cyclic rotation because Wiener filter is real
+    IntegratedTD = [IntegratedTD(9:end); IntegratedTD(1:8)];
+    
+%     FreqDomainData = fftshift(FFTradix248(IntegratedTD,0));   % 0/1 FFT/IFFT;
+    FreqDomainData = fftshift(FFTradix248New(IntegratedTD,0));   % 0/1 FFT/IFFT;
+    
+PatternBin('Files/FreqDomain','inFFT',IntegratedTD,11,0,[0 1]);
+PatternBin('Files/FreqDomain','outFFT',FreqDomainData,12,0,[0 1]);
+
+    % Remove 2 MSBs and add 2 0's LSBs
+    LongPreAverage = SaturateSgn(FreqDomainData(7:end-5)*4,12);                   % remove zero padding
+else
+    error('Incorrect value of Sym in ChannelAcquisition');
+end
+
+
+
+

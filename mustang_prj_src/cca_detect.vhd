@@ -159,6 +159,7 @@
     add_pow_ff32    <= sxt(mult_pow_ff32_i, 2*data_est_size_g+1) + sxt(mult_pow_ff32_q, 2*data_est_size_g+1);
 
     -- Rounding and saturation
+    -- 舍入、
     add_pow_int      <= sat_round_unsigned_slv(add_pow,2,4);
     add_pow_ff32_int <= sat_round_unsigned_slv(add_pow_ff32,2,4);
 
