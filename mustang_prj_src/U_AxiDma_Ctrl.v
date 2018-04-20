@@ -4,7 +4,6 @@
 //3.当AXI_DMA启动后，使能中断，写入MM2S_DMACR.IOC_IrqEn和MM2S_DMACR.Err_IrqEn.
 //4.写入有效地址到MM2S_SA寄存器中
 //5.写入传输字节长度到MM2S_LENGTH寄存器中，该寄存器必须最后写入。
-
 */
 `timescale 1 ns / 1 ps
 `define SIMU_ON
@@ -40,7 +39,12 @@
     )
     (
         // Users to add ports here
+        input     wire                AXIDMA_REQ_VALID,
+        input     wire  [127:0]       AXIDMA_REQ_DATA,
+        output    reg                 AXIDMA_REQ_READY,
 
+        input     wire                AXI_DMA_MM2S_IRQ,
+        input     wire                AXI_DMA_S2MM_IRQ,
         // User ports ends
         // Do not modify the ports beyond this line
 
@@ -296,7 +300,9 @@
           end                                                                               
         else                                                                       
           begin  
-            init_txn_ff <= INIT_AXI_TXN;
+            //init_txn_ff <= INIT_AXI_TXN;
+            //当DiniDMA发起DMA请求时，产生初始化脉冲信号
+            init_txn_ff   <= AXIDMA_REQ_VALID;
             init_txn_ff2 <= init_txn_ff;                                                                 
           end                                                                      
       end     
@@ -487,7 +493,20 @@
 
     //The Read Data channel returns the results of the read request 
     //The master will accept the read data by asserting axi_rready
-    //when there is a valid read data available.
+    //when there is a valid read data available.  always @(posedge clk or negedge rst_n)
+  begin
+    if(!rst_n)
+    begin
+    AXIDMA_REQ_READY    <= 1'b1;
+    end
+    else begin
+      if(current_state == S_IDLE)
+        AXIDMA_REQ_READY    <= 1'b1;
+      else
+        AXIDMA_REQ_READY    <= 1'b0;        
+    end
+  end
+
     //While not necessary per spec, it is advisable to reset READY signals in
     //case of differing reset latencies between master/slave.
 
@@ -524,13 +543,65 @@
     reg         transfer_finish;
     (* mark_debug = "true" *)
     reg [7:0]   cnt_wr_all;
+
+    reg [127:0] dma_req;
     
     wire dma_run;
     assign dma_run = ~expected_rdata[`Reg_Sr_Halted];
-    
-    `ifdef simu_on
-    reg [15*8:0] write_state_str;
 
+  /***********************************************************
+  * 当DiniDMA发起DMA请求并且目前状态为空闲时，接收请求字段 
+  ***********************************************************/
+  always @(posedge clk or negedge rst_n)
+  begin
+    if(!rst_n)
+    begin
+      dma_req <= 128'b0;          
+    end
+    else begin
+      if(AXIDMA_REQ_VALID & current_state == S_IDLE)
+        dma_req <= AXIDMA_REQ_DATA;
+      else
+        dma_req <= 128'b0;                
+    end
+  end
+
+  
+  /***********************************************************
+  * 只有当状态机处于空闲状态，才能接收AXIDMA的请求   
+  ***********************************************************/
+  always @(posedge clk or negedge rst_n)
+  begin
+    if(!rst_n)
+    begin
+    AXIDMA_REQ_READY    <= 1'b1;
+    end
+    else begin
+      if(current_state == S_IDLE)
+        AXIDMA_REQ_READY    <= 1'b1;
+      else
+        AXIDMA_REQ_READY    <= 1'b0;        
+    end
+  end
+    
+  /***********************************************************
+  * 如果AXI_DMA传输完成，给出中断信号，判断传输完成 
+  ***********************************************************/
+  always @(posedge clk or negedge rst_n)
+  begin
+    if(!rst_n)
+    begin
+      transfer_finish    <= 1'b0;
+    end
+    else begin
+      if(AXI_DMA_MM2S_IRQ)
+        transfer_finish <= 1'b1;
+      else
+        transfer_finish <= 1'b0;        
+    end
+  end
+    `ifdef SIMU_ON
+    reg [15*8:0] write_state_str;
     
     always @(*)
     begin
@@ -661,12 +732,12 @@
     S_WRITE_SA:
     begin
       axi_awaddr    = MM2S_SA;
-      axi_wdata     = 32'h3000_1000;       
+      axi_wdata     = dma_req[95:64];       
     end
     //step 4    
     S_WRITE_SA_MSB:
     begin      
-      axi_wdata     = 32'h0000_0000;
+      axi_wdata     = dma_req[127:96];
       axi_awaddr    = MM2S_SA_MSB;
     end
     //step 5 write the length bytes to transfer ,this step is the last step
@@ -789,10 +860,13 @@
                     mst_exec_state <= INIT_READ;//                                      
                   end                                                                   
                 else                                                                    
-                  begin                                                                 
-                    mst_exec_state  <= INIT_WRITE;                                      
+                  begin 
+                    if(current_state != S_WAIT_DONE)
+                        mst_exec_state  <= INIT_WRITE;                                      
+                    else
+                        mst_exec_state  <= IDLE;
                                                                                         
-                      if (~axi_awvalid && ~axi_wvalid && ~M_AXI_BVALID && ~last_write && ~start_single_write && ~write_issued)
+                      if (~axi_awvalid && ~axi_wvalid && ~M_AXI_BVALID && ~last_write && ~start_single_write && ~write_issued && (current_state != S_WAIT_DONE ))
                         begin                                                           
                           start_single_write <= 1'b1;                                   
                           write_issued  <= 1'b1;                                        

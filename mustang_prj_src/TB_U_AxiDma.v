@@ -144,19 +144,20 @@ module TB_U_Axi_Dma(
         .s_axi_lite_rvalid  (m_axi_rvalid)      ,
         .s_axi_lite_rready  (m_axi_rready)      ,
         //内存接口
-        .m_axi_mm2s_araddr  (m_axi_mm2s_araddr  ),
-        .m_axi_mm2s_arburst (m_axi_mm2s_arburst ),
-        .m_axi_mm2s_arcache (m_axi_mm2s_arcache ),
-        .m_axi_mm2s_arlen   (m_axi_mm2s_arlen   ),
-        .m_axi_mm2s_arprot  (m_axi_mm2s_arprot  ),
-        .m_axi_mm2s_arready (m_axi_mm2s_arready ),
-        .m_axi_mm2s_arsize  (m_axi_mm2s_arsize  ),
-        .m_axi_mm2s_arvalid (m_axi_mm2s_arvalid ),
-        .m_axi_mm2s_rdata   (m_axi_mm2s_rdata   ),
-        .m_axi_mm2s_rlast   (m_axi_mm2s_rlast   ),
-        .m_axi_mm2s_rready  (m_axi_mm2s_rready  ),
-        .m_axi_mm2s_rresp   (m_axi_mm2s_rresp   ),
-        .m_axi_mm2s_rvalid  (m_axi_mm2s_rvalid  ),                                
+        .m_axi_mm2s_araddr  (m_axi_mm2s_araddr  ),    //req out
+        .m_axi_mm2s_arburst (m_axi_mm2s_arburst ),    //req out
+        .m_axi_mm2s_arcache (m_axi_mm2s_arcache ),    //req out
+        .m_axi_mm2s_arlen   (m_axi_mm2s_arlen   ),    //req out
+        .m_axi_mm2s_arprot  (m_axi_mm2s_arprot  ),    //req out
+        .m_axi_mm2s_arsize  (m_axi_mm2s_arsize  ),    //req out
+        .m_axi_mm2s_arvalid (m_axi_mm2s_arvalid ),    //req out
+        .m_axi_mm2s_rready  (m_axi_mm2s_rready  ),    //req out
+
+        .m_axi_mm2s_arready (m_axi_mm2s_arready ),    //req in
+        .m_axi_mm2s_rdata   (m_axi_mm2s_rdata   ),    //req in
+        .m_axi_mm2s_rlast   (m_axi_mm2s_rlast   ),    //req in
+        .m_axi_mm2s_rresp   (m_axi_mm2s_rresp   ),    //req in
+        .m_axi_mm2s_rvalid  (m_axi_mm2s_rvalid  ),    //req in                                
         //AXIS_FIFO接口
         .m_axis_mm2s_tdata  (m_axis_mm2s_tdata  ),
         .m_axis_mm2s_tkeep  (m_axis_mm2s_tkeep  ),
