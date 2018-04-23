@@ -24,6 +24,11 @@ module dma_interface(
   //clock and reset        
   input                       clk                         ,
   input                       rst_n                       ,
+
+  output  reg                     AxiDma_Req_Valid            ,
+  output  reg [127:0]             AxiDma_Req_Data             ,
+  input   wire                    AxiDma_Req_Ready            ,
+
   
   /***********************************************************
   * Upstream channel associate with DiniDMA 
@@ -167,17 +172,17 @@ module dma_interface(
   * Use a fifo to story the Req signal from DiniDMA 
   ***********************************************************/
   fifo_generator_0 fifo_generator_0_i(
-  .wr_clk(clk),
-  .rd_clk(clk),
-  .rst(~rst_n),
-  .full(fifo_full),
-  .din(fifo_din),
-  .wr_en(fifo_wr_en),
-  .empty(fifo_empty),
-  .dout(fifo_dout),
-  .rd_en(fifo_rd_en),
-  .rd_data_count(read_count),
-  .wr_data_count(write_count)
+  .wr_clk                             (clk),
+  .rd_clk                             (clk),
+  .rst                                (~rst_n),
+  .full                               (fifo_full),
+  .din                                (fifo_din),
+  .wr_en                              (fifo_wr_en),
+  .empty                              (fifo_empty),
+  .dout                               (fifo_dout),
+  .rd_en                              (fifo_rd_en),
+  .rd_data_count                      (read_count),
+  .wr_data_count                      (write_count)
   );
  
   /***********************************************************
@@ -200,27 +205,39 @@ module dma_interface(
    else
    begin
     /* If the Req is the first Req word,so save the Req information to fifo */
-    if(dma1_tohost_ctrl[4] & ~dma1_tohost_ctrl[3] & dma1_tohost_valid)
-    begin 
-     if(!fifo_full)
-     begin
+   if(!fifo_full)
+   begin
       
-      fifo_wr_en                <= 1'b1;
-      fifo_din                  <= dma1_tohost_data;
-      dma1_tohost_almost_full   <= 1'b0;
-      
-     end
-     
-     else
+      if(dma1_tohost_ctrl[4] & ~dma1_tohost_ctrl[3] & dma1_tohost_valid)     
       begin
+      
+      fifo_wr_en                      <= 1'b1;
+      fifo_din[63:0]                  <= dma1_tohost_data;
+      dma1_tohost_almost_full         <= 1'b0;
+      
+    end
+     
+      /* If the Req is the second Req word, so save the Req information to fifo
+      * MSB bit zone*/
+      else if(dma1_tohost_ctrl[4] & dma1_tohost_ctrl[3] & dma1_tohost_valid)
+      begin
+
+      fifo_wr_en                     <= 1'b1;
+      fifo_din[127:64]                <= dma1_tohost_data;
+      dma1_tohost_almost_full        <= 1'b0; 
+
+      end 
+      else begin
+        fifo_wr_en                  <= 1'b0;
+        dma1_tohost_almost_full     <= 1'b0;
+      end
+    end
+   else begin
       
        fifo_wr_en               <= 1'b0;
        dma1_tohost_almost_full  <= 1'b1;
-      
+
      end
-    end
-    else
-     fifo_wr_en   <= 1'b0;
      
     case(down_state)
     /* If the fifo not empty,read the req from it */
@@ -229,8 +246,12 @@ module dma_interface(
      cnt_tohost_data        <= 0;  
      dma1_fromhost_data_temp[63:0]  <= 64'b1;
      dma1_fromhost_valid_temp       <= 1'b0;   
-     dma1_fromhost_ctrl_temp        <=8'b0;
+     dma1_fromhost_ctrl_temp        <= 8'b0;
      
+  /***********************************************************
+  * When the fifo is not empty,read it and get the addr message
+  * and length message. 
+  ***********************************************************/
      if(!fifo_empty)
      begin
      
@@ -241,13 +262,24 @@ module dma_interface(
       tag_num                    <= fifo_dout[39:36];
       length_transfer_words      <= fifo_dout[15:0]; 
       down_dst_addr              <= fifo_dout[29:27];
+
+  /***********************************************************
+  * When the DMA_CTRL is IDLE,then send the REQ Signal to
+  * DMA_CTRL.
+  ***********************************************************/
+      AxiDma_Req_Valid            <= 1'b1;
+      if(AxiDma_Req_Ready)
+        AxiDma_Req_Data           <= fifo_dout;
+      else
+        AxiDma_Req_Data           <= 128'b0;
                        
-     end
+    end
      else
       begin
-      
-       down_state    <= DOWN_IDLE;
-       fifo_rd_en    <= 1'b0;
+        AxiDma_Req_Valid          <= 1'b0;
+        AxiDma_Req_Data           <= 128'b0;
+        down_state    <= DOWN_IDLE;
+        fifo_rd_en    <= 1'b0;
        
      end
     end
