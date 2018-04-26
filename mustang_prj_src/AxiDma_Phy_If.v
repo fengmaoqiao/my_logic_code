@@ -36,6 +36,18 @@ module ...
   output    wire          hready                          ,
   output    wire  [1:0]   hresp                           ,
 
+  input     wire          axis_mm2s_tvalid                .
+  input     wire  [7:0]   axis_mm2s_tkeep                 ,
+  input     wire  [63:0]  axis_mm2s_tdata                 ,
+  input     wire          axis_mm2s_tlast                 ,
+  output    wire          axis_mm2s_tready                ,
+
+  output    wire          axis_s2mm_tvalid                ,
+  output    wire  [7:0]   axis_s2mm_tkeep                 ,
+  output    wire  [63:0]  axis_s2mm_tdata                 ,
+  output    wire          axis_s2mm_tlast                 ,
+  input     wire          axis_s2mm_tready                ,
+
   input     wire          phyRdy                          ,
   input     wire          mackeepRFOn                     ,//no use
   output    wire          TxkeepRFOn                      ,//no use
@@ -71,6 +83,7 @@ module ...
 
 );
 
+  reg       [   7:0]      txVectorData[0:15]             ;
   /**********************************************************
   * Signal Declation
   **********************************************************/
@@ -88,8 +101,10 @@ module ...
   assign  hresp = 2'b00;
   
   assign  hsel_reg    = hsel && (haddr[9:0]>=10'h000) && (haddr[9:0]<=10'h003);
-  assign  hsel_txdata = hsel && (haddr[9:0]>=10'h004) && (haddr[9:0]<=10'h084);
-  assign  hsel_rxdata = hsel && (haddr[9:0]>=10'h088) && (haddr[9:0]<=10'h108);
+  assign  reg_txVectorData  = hsel && (haddr[9:0] >= 10'h001) && (haddr[9:0] <= 10'h004);
+  //assign  hsel_txdata = hsel && (haddr[9:0]>=10'h004) && (haddr[9:0]<=10'h084);
+  //assign  hsel_rxdata = hsel && (haddr[9:0]>=10'h088) && (haddr[9:0]<=10'h108);
+
 
   assign  testmode    = testmode_status[0];
   assign  txrxmode    = testmode_status[1];
@@ -232,6 +247,28 @@ module ...
           write_pending <= 1'b0;
           case(haddr[9:0])
             10'b0000_0000_00:testmode_status  <=  hwdata[31:0];
+
+            /* 写入TxVector */
+            10'b0000_0000_01:reg_txVectorData[0]  <= hwdata[7:0];
+            10'b0000_0000_01:reg_txVectorData[1]  <= hwdata[15:8];
+            10'b0000_0000_01:reg_txVectorData[2]  <= hwdata[23:16];
+            10'b0000_0000_01:reg_txVectorData[3]  <= hwdata[31:24];
+
+            10'b0000_0000_10:reg_txVectorData[4]  <= hwdata[7:0];
+            10'b0000_0000_10:reg_txVectorData[5]  <= hwdata[15:8];
+            10'b0000_0000_10:reg_txVectorData[6]  <= hwdata[23:16];
+            10'b0000_0000_10:reg_txVectorData[7]  <= hwdata[31:24];
+
+            10'b0000_0000_11:reg_txVectorData[8]  <= hwdata[7:0];
+            10'b0000_0000_11:reg_txVectorData[9]  <= hwdata[15:8];
+            10'b0000_0000_11:reg_txVectorData[10] <= hwdata[23:16];
+            10'b0000_0000_11:reg_txVectorData[11] <= hwdata[31:24];
+
+            10'b0000_0001_00:reg_txVectorData[12] <= hwdata[7:0];
+            10'b0000_0001_00:reg_txVectorData[13] <= hwdata[15:8];
+            10'b0000_0001_00:reg_txVectorData[14] <= hwdata[23:16];
+            10'b0000_0001_00:reg_txVectorData[15] <= hwdata[31:24];
+
             default:;
           endcase
         if(hsel_txdata == 1'b1)begin
@@ -275,12 +312,18 @@ module ...
   always @*
   begin
     case(txstateCs)
+  /***********************************************************
+  * 当软件写startTx_p比特位时， 离开IDLE状态，进入Tx_VECTOR状态
+  ***********************************************************/
       IDLE:
         if(startTx_p)
           txstateNs = TX_VECTOR;
         else
           txstateNs = txstateCs;
 
+  /***********************************************************
+  * 当计数完TX_VECTOR后进入TX_DATA状态
+  ***********************************************************/
       TX_VECTOR:
         if(txVectorCnt  ==  5'd16)
         begin
@@ -310,6 +353,14 @@ module ...
     endcase
   end
 
+  always @(*)
+  begin
+    case(txstateCs):
+      TX_VECTOR:
+      begin
+        axis_mm2s_tvalid    == 1'b1;
+
+
 
   always @(posedge clk or negedge rst_n)
   begin
@@ -319,6 +370,31 @@ module ...
       txVectorCnt <= txVectorCnt  + 5'd1;
     else
       txVectorCnt <= 5'b0000;
+  end
+
+
+  always @(*)begin
+    case(txVectorCnt):
+      5'd4    :test_tx_wr_data  = {reg_txVectorData[0],reg_txVectorData[1],reg_txVectorData[2],reg_txVectorData[3]};
+      5'd8    :test_tx_wr_data  = {reg_txVectorData[4],reg_txVectorData[5],reg_txVectorData[6],reg_txVectorData[7]};
+      5'd9    :test_tx_wr_data  = {reg_txVectorData[8],reg_txVectorData[9],reg_txVectorData[10],reg_txVectorData[11]};
+      5'd10   :test_tx_wr_data  = {reg_txVectorData[12],reg_txVectorData[13],reg_txVectorData[14],reg_txVectorData[15]}:
+      default :test_tx_wr_data  = 32'b0;
+  endcase
+  end
+
+
+
+
+
+
+  always @(posedge clk or negedge rst_n)
+  begin
+    if(!rst_n)begin
+
+    end
+    else begin
+    end
   end
 
 
