@@ -1,0 +1,889 @@
+// +FHDR***********************************************************************
+// Copyright        :   CNG
+// Confidential     :   I LEVEL
+// ============================================================================
+// FILE NAME        :   HOTRA
+// CREATE DATE      :   2017-12-12
+// DEPARTMENT       :   R&D
+// AUTHOR           :   TingtingGan
+// AUTHOR'S EMAIL   :   gantingting@cng.com
+// AUTHOR'S TEL     :   18280151291
+// ============================================================================
+// RELEASE  HISTORY
+// VERSION  DATE        AUTHOR          DESCRIPTION
+// V100     2017-12-12  TingtingGan     Original
+// ============================================================================
+// KEYWORDS         :
+// PURPOSE          :   Hot redundancy arbitration
+// ============================================================================
+// REUSE ISSUES
+// Reset Strategy   :   Async clear, active hign
+// Clock Domains    :   clk_125m
+// Critical Timing  :   N/A
+// Instantiations   :   N/A
+// Ynthesizable     :   N/A
+// Others           :
+// -FHDR***********************************************************************
+`include "DEFINES.v"
+
+module  HOTRA
+    (
+    // clock & reset
+    clk_12_5m                   ,   
+    rst_12_5m                   ,   
+    clk_emif                    ,   
+    rst_emif                    ,   
+
+    // write port
+    wr_sel                      ,   
+    wr_en                       ,   
+    wr_data                     ,  
+
+    self_status                 ,
+    mcu_status                  ,
+    uart_err                    ,
+    arm_ok                      ,
+    hotra_en                    ,
+    self_send_o                 ,
+    enable_slot                 ,
+
+	slot_num					, 
+	redundancy_mode				,  
+	hr_online					, 
+
+    self_cfg_err                ,   
+    slink_err                   ,   
+
+    hr_ht_in                    ,   
+    self_ht_out                 ,
+    hr_ms_in                    ,   
+    self_ms_out                 , 
+
+    soft_rst                    ,   
+    selfm_ms_flag               ,   
+    excfg_ms_flag               ,   
+    slot2_ms_flag               ,   
+    slot3_ms_flag               ,   
+    slot4_ms_flag               ,   
+    slot5_ms_flag               ,   
+    slot6_ms_flag               ,   
+    slot7_ms_flag               ,   
+    slot8_ms_flag               ,   
+    slot9_ms_flag               ,   
+    slot10_ms_flag              ,   
+    slot11_ms_flag              ,   
+    slot12_ms_flag              ,   
+    slot13_ms_flag              ,   
+    slot14_ms_flag              ,   
+    slot15_ms_flag               
+    );
+
+/**********************************************************************************\
+***************************** declare parameter ************************************
+\**********************************************************************************/
+`ifdef  SIM
+parameter   NORMAL_FREQ    =   4'd3  ; 
+parameter   FAULT_FREQ     =   4'd5  ;
+
+parameter   SLAVE_FREQ     =   4'd3  ; 
+parameter   MASTER_FREQ    =   4'd5  ; 
+`else
+parameter   NORMAL_FREQ    =   4'd10 ; // 1024 * 80ns = 82us 
+parameter   FAULT_FREQ     =   4'd15 ; // 32768 * 80ns = 2.6ms
+
+parameter   SLAVE_FREQ     =   4'd10 ; 
+parameter   MASTER_FREQ    =   4'd15 ; 
+`endif
+
+/**********************************************************************************\
+***************************** declare interface signal *****************************
+\**********************************************************************************/
+// declare input singal
+input   wire                    clk_12_5m                           ;   
+input   wire                    rst_12_5m                           ;   
+input   wire                    clk_emif                            ;   
+input   wire                    rst_emif                            ;   
+
+input   wire                    wr_sel                              ;   
+input   wire                    wr_en                               ;   
+input   wire        [15:0]      wr_data                             ;
+input   wire        [3:0]       slot_num                            ;   
+input   wire        [7:0]       redundancy_mode                     ;  
+input   wire                    hr_online                           ;   
+input   wire                    self_cfg_err                        ;   
+input   wire        [15:0]      slink_err                           ;   
+input   wire                    hr_ht_in                            ;   
+input   wire                    hr_ms_in                            ;   
+
+// declare output signal
+output  reg                     soft_rst                            ;   
+output  reg                     self_ht_out                         ;   
+output  reg                     self_ms_out                         ;   
+output  reg         [7:0]       selfm_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       excfg_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot2_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot3_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot4_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot5_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot6_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot7_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot8_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot9_ms_flag   /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot10_ms_flag  /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot11_ms_flag  /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot12_ms_flag  /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot13_ms_flag  /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot14_ms_flag  /* synthesis syn_preserve = 1 */ ;
+output  reg         [7:0]       slot15_ms_flag  /* synthesis syn_preserve = 1 */ ;
+
+input   wire        [15:0]      self_status             ;
+input   wire        [15:0]      mcu_status              ;
+input   wire                    uart_err                ;
+output  reg                     arm_ok                  ;
+input   wire                    hotra_en                ;
+output  wire                    self_send_o             ;
+input   wire        [15:0]      enable_slot             ;
+// declare inout signal
+
+/**********************************************************************************\
+**************************** declare singal attribute ******************************
+\**********************************************************************************/
+// wire signal
+wire                            self_err                            ;  
+wire                            hr_ht_in_ring                       ;   
+wire                            hr_ht_in_fall                       ;   
+wire                            hr_ms_in_ring                       ;   
+wire                            hr_ms_in_fall                       ;   
+wire         [7:0]              master_slave_flag                   ;   
+
+// reg signal
+reg                             ms_mode                             ;   
+reg                             hr_online_d1                        ;   
+reg                             hr_online_d2                        ; 
+reg         [3:0]               slot_num_d1                         ;   
+reg         [3:0]               slot_num_d2                         ;   
+reg         [15:0]              ms_out_cnt                          ;  
+reg                             hr_ms_in_d1                         ;   
+reg                             hr_ms_in_d2                         ;   
+reg                             hr_ms_in_d3                         ;   
+reg                             hr_ms_in_d4                         ;   
+reg         [15:0]              hr_ms_in_cnt                        ;   
+reg         [1:0]               hr_ms_state                         ;   
+reg                             self_cfg_err_d1                     ;   
+reg                             self_cfg_err_d2                     ;   
+reg         [15:0]              slink_err_d1                        ;   
+reg         [15:0]              slink_err_d2                        ;  
+reg         [15:0]              ht_out_cnt                          ;  
+reg                             hr_ht_in_d1                         ;   
+reg                             hr_ht_in_d2                         ;   
+reg                             hr_ht_in_d3                         ;   
+reg                             hr_ht_in_d4                         ;  
+reg         [15:0]              hr_ht_in_cnt                        ;   
+reg         [1:0]               hr_ht_state                         ;   
+reg                             wr_sel_d1                           ;   
+reg                             wr_en_d1                            ;   
+reg         [15:0]              wr_data_d1                          ;   
+reg         [3:0]               wr_data_cnt                         ;  
+reg                             arm_initial_ok                      ;  
+reg                             arm_ok_d1                           ;   
+reg                             arm_ok_d2                           ;  
+reg                             soft_reset                          ;   
+reg                             soft_reset_d1                       ;   
+
+/**********************************************************************************\
+******************************** debug code ****************************************
+\**********************************************************************************/
+
+/**********************************************************************************\
+********************************* main code ****************************************
+\**********************************************************************************/
+//----------------------------------------------------------------------------------
+// arm status judge
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_emif ) begin
+    wr_sel_d1   <=   wr_sel  ;
+    wr_en_d1    <=   wr_en   ;
+    wr_data_d1  <=   wr_data ;
+end
+
+always @ ( posedge clk_emif or negedge rst_emif ) begin
+    if( rst_emif == 1'b0 ) begin
+        wr_data_cnt  <=   4'h0 ;
+    end
+    else begin
+        if ( wr_sel_d1 == 1'b1 ) begin
+            if ( wr_en_d1 == 1'b1 ) begin
+                wr_data_cnt  <=   wr_data_cnt + 1'b1 ;
+            end
+        end
+        else begin
+            wr_data_cnt  <=   4'h0 ;
+        end
+    end
+end
+
+always @ ( posedge clk_emif or negedge rst_emif ) begin
+    if( rst_emif == 1'b0 ) begin
+        arm_initial_ok  <=   1'b0 ;
+    end
+    else begin
+        if ( wr_data_cnt == 4'd1 && wr_en_d1 == 1'b1 ) begin
+            if (  wr_data_d1 == 16'hffff ) begin
+                arm_initial_ok  <=   1'b1 ;
+            end
+            else begin
+                arm_initial_ok  <=   1'b0 ;
+            end
+        end
+    end
+end
+
+always @ ( posedge clk_emif or negedge rst_emif ) begin
+    if( rst_emif == 1'b0 ) begin
+        soft_reset  <=   1'b0 ;
+    end
+    else begin
+        if ( wr_data_cnt == 4'd3 && wr_en_d1 == 1'b1 ) begin
+            if (  wr_data_d1 == 16'h5a5a ) begin
+                soft_reset  <=   1'b1 ;
+            end
+            else begin
+                soft_reset  <=   1'b0 ;
+            end
+        end
+    end
+end
+
+always @ ( posedge clk_emif ) begin
+    soft_reset_d1   <=   soft_reset  ;
+end
+
+always @ ( posedge clk_emif ) begin
+    if ( soft_reset == 1'b1 && soft_reset_d1 == 1'b0 ) begin 
+        soft_rst   <=   1'b0  ;
+    end
+    else begin
+        soft_rst   <=   1'b1  ;
+    end
+end
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        arm_ok_d1  <=   1'b0 ;
+        arm_ok_d2  <=   1'b0 ;
+    end
+    else begin
+        arm_ok_d1  <=   arm_initial_ok ;
+        arm_ok_d2  <=   arm_ok_d1 ;
+    end
+end
+
+//----------------------------------------------------------------------------------
+// self master or slave judge
+//----------------------------------------------------------------------------------
+// 1 : master , 0 : slave
+// 对方不在线则任意情况自己主，如果对方在线则判断：
+// 自己是0号槽，如果对方有心跳且自己故障或者对方有主标记则自己从，否则自己是主；
+// 自己是1号槽，如果自己无错误且对方是从配置或者对方无心跳则自己主，否则自己从
+//always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+//	if( rst_12_5m == 1'b0 ) begin
+//		ms_mode	  <=   1'b0 ;
+//	end
+//	else begin
+//	   // if ( hr_online_d2 == 1'b1 && hr_ht_state != 2'b11 ) begin
+//		if ( hr_online_d2 == 1'b1 ) begin
+//			if ( slot_num_d2 == 4'd0 ) begin
+//				if ( ( self_err == 1'b1 || hr_ms_in_d2 == 1'b1 ) && hr_ht_state == 2'b01 ) begin
+//					ms_mode	  <=   1'b0 ;
+//				end
+//				else begin
+//					ms_mode	  <=   1'b1 ;
+//				end
+//			end
+//			else begin
+//				if ( self_err == 1'b0 && ( hr_ms_in_d2 == 1'b0 || hr_ht_state != 2'b01 ) ) begin
+//					ms_mode	  <=   1'b1 ;
+//				end
+//				else begin
+//					ms_mode	  <=   1'b0 ;
+//				end
+//			end
+//		end
+//		else begin
+//			ms_mode	  <=   1'b1 ;
+//		end
+//	end
+//end
+//
+
+localparam 
+            IDLE         =   16'd0                                  ,
+            SINGLE_MC    =   16'd1                                  ,   
+            DOUBLE_MC    =   16'd2                                  ,   
+            STATUS_JUDGE =   16'd4                                  ,   
+            L2_CHECK     =   16'd8                                 ,   
+            L3_CHECK     =   16'd16                                 ,   
+            S_MC_ERR     =   16'd32                                 ;   
+
+reg         [31:0]              current_state                       ;   
+reg         [31:0]              next_state                          ;   
+wire                            arm_status_diff                     ;   
+wire                            slot_slink_diff                     ;   
+reg                             l2_check_finish                     ;   
+reg                             l3_check_finish                     ;   
+wire                            mcu_invalid                         ;
+wire                            mcu_arm_ok                          ;
+wire        [13:0]              mcu_slink_err                       ;
+wire                            mcu_is_master                       ;
+
+reg                             mcu_is_master_d1                    ;
+reg                             mcu_is_master_d2                    ;
+
+// the redundency mc board FPGA invalid state
+assign mcu_invalid      =       ( ~hr_online ) || (hr_ht_state == 2'b11 && uart_err );
+assign mcu_is_master    =       ( hr_ms_in_d2 == 1'b1 );
+
+assign arm_status_diff  =       ( self_status[14]   != mcu_status[14]   );
+assign slot_slink_diff  =       ( self_status[13:0] != mcu_status[13:0] );
+assign mcu_arm_ok       =       ( mcu_status[15] ); 
+assign mcu_slink_err    =       ( mcu_status[13:0] );
+// for test
+`ifdef SIM
+parameter       CHECK_PERIDO     =   32'd1000;     // 8ms
+`else
+parameter       CHECK_PERIDO    =   32'd100000;        // 8us
+`endif
+wire                            check_flag          ;
+reg       [31:0]                check_cnt           ;
+//----------------------------------------------------------------------------------
+// state machine
+//----------------------------------------------------------------------------------
+assign  check_flag  =   ( check_cnt == 32'd0 ); 
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        mcu_is_master_d1    <= 1'b0;
+        mcu_is_master_d2    <= 1'b0;
+    end
+    else begin
+        mcu_is_master_d1    <= mcu_is_master;
+        mcu_is_master_d2    <= mcu_is_master_d1;
+    end
+end
+
+
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        check_cnt   <=  CHECK_PERIDO;            
+    end
+    else begin
+        if(check_cnt    ==   32'd0)
+            check_cnt   <= CHECK_PERIDO ;
+        else
+            check_cnt   <= check_cnt - 1;
+    end
+end
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        arm_ok  <= 1'b0;
+    end
+    else begin
+        arm_ok  <= arm_ok_d2;
+    end
+end
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m  ) begin
+    if( rst_12_5m == 1'b0  ) begin
+        current_state       <=  IDLE;
+    end
+    else begin
+        //if( check_flag )
+            current_state       <=  next_state  ;      
+        //else
+        //    current_state       <=  current_state ; 
+    end
+end
+
+always @ (*) begin
+    case( current_state )
+        IDLE:
+            // when power on,check the cfg status,if ok then check the mcu status
+            // only when system reset going to the INITIAL state.
+            if( mcu_invalid )
+                next_state  =   SINGLE_MC;
+            else
+                next_state  =   DOUBLE_MC;
+           
+        SINGLE_MC:
+            // when the state is single mc,if self_cfg_err,going to the state single mc err state,
+            // and when self_cfg,back to single mc state;
+            if( mcu_invalid )begin
+                if( self_err )
+                    next_state  =   S_MC_ERR;
+                else
+                    next_state  =   SINGLE_MC;
+            end
+            else
+                next_state  =   DOUBLE_MC;
+        S_MC_ERR:
+            // when this state happen,indicate this mc cannot work until
+            // fault clear
+            if( self_err )
+                next_state      =   next_state;
+            else
+                next_state      =   SINGLE_MC;
+        DOUBLE_MC:
+            // check the mcu state,if invalid,go to the single mc state,
+            // else check the mcu and self status,if same ,the master and slaver
+            // hold,if not same,goto status_judge state;
+            if( mcu_invalid )begin
+                next_state  =   SINGLE_MC;
+            end
+            else begin
+                if( |self_status )
+                    next_state  =   STATUS_JUDGE;
+                else
+                    next_state  =   DOUBLE_MC;
+            end
+            // fault case judge
+        STATUS_JUDGE:
+            if( mcu_invalid )
+                next_state  =   SINGLE_MC;
+            else begin
+                if( mcu_status != self_status )begin
+                    if( arm_status_diff )
+                        next_state  =   L2_CHECK;
+                    else if( slot_slink_diff )
+                        next_state  =   L3_CHECK;
+                    else
+                        next_state  =   SINGLE_MC;
+                end
+                else
+                    next_state  =   DOUBLE_MC;
+            end
+        L2_CHECK:
+            if( mcu_invalid )
+                next_state  =   SINGLE_MC;
+            else begin
+                if( arm_status_diff )
+                    next_state  =   L2_CHECK;
+                else
+                    next_state  =   L3_CHECK;
+            end
+
+        L3_CHECK:
+            if( mcu_invalid )
+                next_state  =   SINGLE_MC;
+            else begin
+                if( slot_slink_diff )
+                    next_state  =   L3_CHECK;
+                else
+                    next_state  =   STATUS_JUDGE;
+            end
+        default:
+            next_state  =   IDLE;
+    endcase
+end
+
+always @ ( * ) begin
+    case( current_state )
+            // when IDLE state,default ms_mode is slaver.
+        IDLE:
+                ms_mode = 1'b0;
+            // when single main controller,ms_mode must be master.
+        SINGLE_MC:
+                ms_mode = 1'b1;
+        S_MC_ERR:
+            if( mcu_invalid )begin
+                ms_mode = 1'b1;
+            end
+            else begin
+                if( mcu_is_master )
+                    ms_mode = 1'b0;
+                else
+                    ms_mode = 1'b1;
+            end
+        
+        DOUBLE_MC:
+            // normol mode, if master is exist,so self is master.
+            // if master is not exist ,according to the slot_number.
+                if( slot_num_d2 == 4'd0 ) begin
+                    if( mcu_is_master && ~mcu_invalid )
+                        ms_mode = 1'b0;
+                    else
+                        ms_mode = 1'b1;
+                end
+                else begin
+                    if( mcu_invalid )
+                        ms_mode <= 1'b1;
+                    else
+                        ms_mode <= 1'b0;
+                end
+            
+        STATUS_JUDGE:
+            // fault occur,and judge the fault
+            if( mcu_invalid )begin
+                ms_mode = 1'b1;
+            end
+            else begin
+                if( mcu_is_master )
+                   ms_mode = 1'b0;
+                else
+                   ms_mode = 1'b1;
+                end
+            // check the L2 fault,include the arm fault
+        L2_CHECK:
+            if( ms_mode == 1'b1 )begin
+                if( arm_ok_d2 )
+                    ms_mode = 1'b1;
+                else if( ~arm_ok_d2 && mcu_arm_ok )
+                    ms_mode = 1'b0;
+                else
+                    ms_mode = 1'b1;
+            end
+            else begin
+                if( mcu_is_master )
+                    ms_mode = 1'b0;
+                else if( ~mcu_is_master )
+                    ms_mode = 1'b1;
+            end
+
+            // check the L3 fault,include the slink fault
+        L3_CHECK:
+            if( slink_err[13:0] > mcu_slink_err )
+                ms_mode = 1'b0;
+            else if( ( slink_err[13:0] < mcu_slink_err ) && ( ~mcu_is_master ) )
+                ms_mode = 1'b1;
+            else
+                ms_mode = ms_mode;
+        default:
+           ;
+       endcase
+end
+
+reg self_send_d1;
+reg self_send_en;
+assign self_send_o  =   ( self_send_d1 ^ self_send_en ) & ( self_send_en );
+
+always @ ( posedge clk_emif or negedge rst_emif ) begin
+    if( rst_emif == 1'b0 ) begin
+        self_send_d1    <= 1'b0;
+    end
+    else begin
+        self_send_d1    <= self_send_en;
+    end
+end
+
+always @ ( posedge clk_emif or negedge rst_emif ) begin
+    if( rst_emif == 1'b0 ) begin
+        self_send_en    <= 1'b0;
+    end
+    else begin
+        if( current_state == STATUS_JUDGE )
+            self_send_en    <= 1'b1;
+        else
+            self_send_en    <= 1'b0;
+    end
+end
+
+`ifdef SIM
+reg         [15*8:0]        state_str;
+always @ (*)begin
+    case(current_state)
+        IDLE            :   state_str    =   {"IDLE"}            ;
+        SINGLE_MC       :   state_str   =   {"SINGLE_MODE"}     ;    
+        DOUBLE_MC       :   state_str   =   {"DOUBLE_MODE"}     ;
+        STATUS_JUDGE    :   state_str   =   {"STATUS_JUDGE"}    ;
+        L2_CHECK        :   state_str   =   {"L2_CHECK"}        ;
+        L3_CHECK        :   state_str   =   {"L3_CHECK"}        ;
+        S_MC_ERR        :   state_str   =   {"S_MC_ERR"}        ;
+    endcase
+end
+`endif
+//----------------------------------------------------------------------------------
+// add by fmq
+//----------------------------------------------------------------------------------
+assign	master_slave_flag	=	ms_mode == 1'b1 ? 8'hff : 8'h00 ;
+
+//always @ ( * )
+//begin
+//    if( current_state == IDLE )
+//        master_slave_flag = 8'h00;
+//    else begin
+//        if( ms_mode == 1'b1 )
+//            master_slave_flag = 8'hff;
+//        else
+//            master_slave_flag = 8'h00;
+//    end
+//end
+
+always @ ( posedge clk_12_5m ) begin
+    selfm_ms_flag   <=   master_slave_flag ;
+    excfg_ms_flag   <=   master_slave_flag ;
+    slot2_ms_flag   <=   master_slave_flag ;
+    slot3_ms_flag   <=   master_slave_flag ;
+    slot4_ms_flag   <=   master_slave_flag ;
+    slot5_ms_flag   <=   master_slave_flag ;
+    slot6_ms_flag   <=   master_slave_flag ;
+    slot7_ms_flag   <=   master_slave_flag ;
+    slot8_ms_flag   <=   master_slave_flag ;
+    slot9_ms_flag   <=   master_slave_flag ;
+    slot10_ms_flag  <=   master_slave_flag ;
+    slot11_ms_flag  <=   master_slave_flag ;
+    slot12_ms_flag  <=   master_slave_flag ;
+    slot13_ms_flag  <=   master_slave_flag ;
+    slot14_ms_flag  <=   master_slave_flag ;
+    slot15_ms_flag  <=   master_slave_flag ;
+end
+
+//----------------------------------------------------------------------------------
+// hr online detect
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_online_d1  <=   1'b0 ;
+        hr_online_d2  <=   1'b0 ;
+    end
+    else begin
+        hr_online_d1  <=   hr_online ;
+        hr_online_d2  <=   hr_online_d1 ;
+    end
+end
+
+//----------------------------------------------------------------------------------
+// slot number detect
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        slot_num_d1  <=   4'h00 ;
+        slot_num_d2  <=   4'h00 ;
+    end
+    else begin
+        slot_num_d1  <=   slot_num ;
+        slot_num_d2  <=   slot_num_d1 ;
+    end
+end
+
+//----------------------------------------------------------------------------------
+// master/slave output control -- master : slow  slave : fast
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        ms_out_cnt  <=   16'h00 ;
+    end
+    else begin
+        if( ms_mode == 1'b1 && ms_out_cnt[MASTER_FREQ] == 1'b1 ) begin
+            ms_out_cnt  <=   16'h00 ;
+        end
+        else if ( ms_mode == 1'b0 && ms_out_cnt[SLAVE_FREQ] == 1'b1 ) begin
+            ms_out_cnt  <=   16'h00 ;
+        end
+        else begin
+            ms_out_cnt  <=   ms_out_cnt + 1'b1 ;
+        end
+    end
+end
+
+//always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+//    if( rst_12_5m == 1'b0 ) begin
+//        self_ms_out   <=   1'b0 ;
+//    end
+//    else begin
+//        if( ms_mode == 1'b1 && ms_out_cnt[MASTER_FREQ] == 1'b1 ) begin
+//            self_ms_out  <=   ~ self_ms_out ;
+//        end
+//        else if ( ms_mode == 1'b0 && ms_out_cnt[SLAVE_FREQ] == 1'b1) begin
+//            self_ms_out  <=   ~ self_ms_out ;
+//        end
+//    end
+//end
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        self_ms_out   <=   1'b0 ;
+    end
+    else begin
+        if( ms_mode == 1'b1 ) begin
+            self_ms_out  <=  1'b1; 
+        end
+        else if ( ms_mode == 1'b0 ) begin
+            self_ms_out  <=   1'b0 ;
+        end
+    end
+end
+//----------------------------------------------------------------------------------
+// master/slave judge of hr -- master : slow , slave : fast  
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_ms_in_d1  <=   1'b0 ;
+        hr_ms_in_d2  <=   1'b0 ;
+        hr_ms_in_d3  <=   1'b0 ;
+        hr_ms_in_d4  <=   1'b0 ;
+    end
+    else begin
+        hr_ms_in_d1  <=   hr_ms_in ;
+        hr_ms_in_d2  <=   hr_ms_in_d1 ;
+        hr_ms_in_d3  <=   hr_ms_in_d2 ;
+        hr_ms_in_d4  <=   hr_ms_in_d3 ;
+    end
+end
+
+assign  hr_ms_in_ring   =   ( hr_ms_in_d3 == 1'b1 && hr_ms_in_d4 == 1'b0 ) ? 1'b1 : 1'b0 ;
+assign  hr_ms_in_fall   =   ( hr_ms_in_d3 == 1'b0 && hr_ms_in_d4 == 1'b1 ) ? 1'b1 : 1'b0 ;
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_ms_in_cnt  <=   16'h00 ;
+    end
+    else begin
+        if( hr_ms_in_ring == 1'b1 || hr_ms_in_fall == 1'b1 ) begin
+            hr_ms_in_cnt  <=   16'h00 ;
+        end
+        else begin
+            hr_ms_in_cnt  <=   hr_ms_in_cnt + 1'b1 ;
+        end
+    end
+end
+
+// master/slave state : 01 : slave 10 : master 11 : heartbeat break 
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_ms_state   <=   2'b00 ;
+    end
+    else begin
+        if ( & hr_ms_in_cnt == 1'b1 ) begin
+            hr_ms_state  <=   2'b11 ;
+        end
+        else if( hr_ms_in_ring == 1'b1 || hr_ms_in_fall == 1'b1 ) begin
+            if ( hr_ms_in_cnt[MASTER_FREQ] == 1'b1 || hr_ms_in_cnt[MASTER_FREQ - 1] == 1'b1 ) begin
+                hr_ms_state  <=   2'b10 ;
+            end
+            else if( hr_ms_in_cnt[SLAVE_FREQ] == 1'b1 || hr_ms_in_cnt[SLAVE_FREQ - 1] == 1'b1 ) begin
+                hr_ms_state  <=   2'b01 ;
+            end
+        end
+    end
+end
+
+//----------------------------------------------------------------------------------
+// err process
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        self_cfg_err_d1  <=   1'b0 ;
+        self_cfg_err_d2  <=   1'b0 ;
+    end
+    else begin
+        self_cfg_err_d1  <=   self_cfg_err ;
+        self_cfg_err_d2  <=   self_cfg_err_d1 ;
+    end
+end
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        slink_err_d1  <=   16'h00 ;
+        slink_err_d2  <=   16'h00 ;
+    end
+    else begin
+        slink_err_d1  <=   slink_err ;
+        slink_err_d2  <=   slink_err_d1 ;
+    end
+end
+
+assign  self_err = ( arm_ok_d2 == 1'b0 || self_cfg_err_d2 == 1'b1 || ( | slink_err_d2[13:0] == 1'b1 ) ) ? 1'b1 : 1'b0 ;    
+
+//----------------------------------------------------------------------------------
+// heartbeat output control -- normal : slow  fault : fast
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        ht_out_cnt  <=   16'h00 ;
+    end
+    else begin
+        if( self_err == 1'b1 && ht_out_cnt[FAULT_FREQ] == 1'b1 ) begin
+            ht_out_cnt  <=   16'h00 ;
+        end
+        else if ( self_err == 1'b0 && ht_out_cnt[NORMAL_FREQ] == 1'b1 ) begin
+            ht_out_cnt  <=   16'h00 ;
+        end
+        else begin
+            ht_out_cnt  <=   ht_out_cnt + 1'b1 ;
+        end
+    end
+end
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        self_ht_out   <=   1'b0 ;
+    end
+    else begin
+        if( self_err == 1'b1 && ht_out_cnt[FAULT_FREQ] == 1'b1 ) begin
+            self_ht_out  <=   ~ self_ht_out ;
+        end
+        else if ( self_err == 1'b0 && ht_out_cnt[NORMAL_FREQ] == 1'b1) begin
+            self_ht_out  <=   ~ self_ht_out ;
+        end
+    end
+end
+
+//----------------------------------------------------------------------------------
+// heartbeat input judge -- normal : slow , fault : fast  
+//----------------------------------------------------------------------------------
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_ht_in_d1  <=   1'b0 ;
+        hr_ht_in_d2  <=   1'b0 ;
+        hr_ht_in_d3  <=   1'b0 ;
+        hr_ht_in_d4  <=   1'b0 ;
+    end
+    else begin
+        hr_ht_in_d1  <=   hr_ht_in ;
+        hr_ht_in_d2  <=   hr_ht_in_d1 ;
+        hr_ht_in_d3  <=   hr_ht_in_d2 ;
+        hr_ht_in_d4  <=   hr_ht_in_d3 ;
+    end
+end
+
+assign  hr_ht_in_ring   =   ( hr_ht_in_d3 == 1'b1 && hr_ht_in_d4 == 1'b0 ) ? 1'b1 : 1'b0 ;
+assign  hr_ht_in_fall   =   ( hr_ht_in_d3 == 1'b0 && hr_ht_in_d4 == 1'b1 ) ? 1'b1 : 1'b0 ;
+
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_ht_in_cnt  <=   16'h00 ;
+    end
+    else begin
+        if( hr_ht_in_ring == 1'b1 || hr_ht_in_fall == 1'b1 ) begin
+            hr_ht_in_cnt  <=   16'h00 ;
+        end
+        else begin
+            hr_ht_in_cnt  <=   hr_ht_in_cnt + 1'b1 ;
+        end
+    end
+end
+
+// heartbeat state : 01 : normal 10 : fault 11 : heartbeat break 
+always @ ( posedge clk_12_5m or negedge rst_12_5m ) begin
+    if( rst_12_5m == 1'b0 ) begin
+        hr_ht_state   <=   2'b00 ;
+    end
+    else begin
+        if ( & hr_ht_in_cnt == 1'b1 ) begin
+            hr_ht_state  <=   2'b11 ;
+        end
+        else if( hr_ht_in_ring == 1'b1 || hr_ht_in_fall == 1'b1 ) begin
+            if ( hr_ht_in_cnt[FAULT_FREQ] == 1'b1 || hr_ht_in_cnt[FAULT_FREQ - 1] == 1'b1 ) begin
+                hr_ht_state  <=   2'b10 ;
+            end
+            else if( hr_ht_in_cnt[NORMAL_FREQ] == 1'b1 || hr_ht_in_cnt[NORMAL_FREQ - 1] == 1'b1 ) begin
+                hr_ht_state  <=   2'b01 ;
+            end
+        end
+    end
+end
+
+endmodule
+
+
